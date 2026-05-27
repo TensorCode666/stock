@@ -252,6 +252,25 @@ body {
   border-color: #f8717133;
 }
 
+.btn.accent {
+  color: var(--accent);
+  border-color: var(--accent-dim);
+}
+
+.btn.accent:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.stock-link {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.stock-link:hover {
+  text-decoration: underline;
+}
+
 .btn-link {
   display: inline-block;
   margin-top: 0.75rem;
@@ -547,8 +566,191 @@ code {
 }
 
 .index-chg.flat,
-.chg.flat {
+.chg.flat,
+.quote-hero.flat .quote-hero-price,
+.quote-inline.flat .quote-inline-price {
   color: var(--muted);
+}
+
+/* 个股详情 / 列表醒目报价 */
+.quote-hero {
+  padding: 1rem 1.25rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--card);
+  min-width: 280px;
+}
+
+.quote-hero.up {
+  border-color: color-mix(in srgb, var(--red) 45%, var(--border));
+  background: color-mix(in srgb, var(--red) 8%, var(--card));
+}
+
+.quote-hero.down {
+  border-color: color-mix(in srgb, var(--green) 45%, var(--border));
+  background: color-mix(in srgb, var(--green) 8%, var(--card));
+}
+
+.quote-hero-top {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  margin-bottom: 0.35rem;
+}
+
+.quote-hero-code {
+  font-size: 0.9rem;
+  color: var(--muted);
+  font-family: var(--mono, monospace);
+}
+
+.quote-hero-name {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.quote-hero-bottom {
+  display: flex;
+  align-items: baseline;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.quote-hero-price {
+  font-size: 2.25rem;
+  font-weight: 700;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+
+.quote-hero.up .quote-hero-price {
+  color: var(--red);
+}
+
+.quote-hero.down .quote-hero-price {
+  color: var(--green);
+}
+
+.quote-hero-badge {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  padding: 0.35rem 0.65rem;
+  border-radius: 6px;
+  font-size: 1rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.quote-hero-badge.up {
+  color: var(--red);
+  background: color-mix(in srgb, var(--red) 18%, transparent);
+}
+
+.quote-hero-badge.down {
+  color: var(--green);
+  background: color-mix(in srgb, var(--green) 18%, transparent);
+}
+
+.quote-hero-badge.flat {
+  color: var(--muted);
+  background: var(--bg);
+}
+
+.quote-inline {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.15rem;
+  line-height: 1.2;
+}
+
+.quote-inline-price {
+  font-size: 1.05rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.quote-inline.up .quote-inline-price {
+  color: var(--red);
+}
+
+.quote-inline.down .quote-inline-price {
+  color: var(--green);
+}
+
+.quote-inline-pct {
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.quote-inline-pct.up {
+  color: var(--red);
+}
+
+.quote-inline-pct.down {
+  color: var(--green);
+}
+
+.pnl-badge {
+  display: inline-block;
+  padding: 0.2rem 0.45rem;
+  border-radius: 4px;
+  font-weight: 600;
+  font-size: 0.9rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.pnl-badge.up {
+  color: var(--red);
+  background: color-mix(in srgb, var(--red) 12%, transparent);
+}
+
+.pnl-badge.down {
+  color: var(--green);
+  background: color-mix(in srgb, var(--green) 12%, transparent);
+}
+
+.pnl-badge .pnl-pct {
+  font-size: 0.85em;
+  margin-left: 0.15rem;
+}
+
+.btn-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0.75rem 0;
+}
+
+.ai-score-panel {
+  margin: 1rem 0;
+  padding: 1rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+}
+
+.ai-score-panel h4 {
+  margin: 0 0 0.5rem;
+  font-size: 0.95rem;
+}
+
+.ai-summary {
+  margin: 0 0 0.75rem;
+  font-weight: 500;
+}
+
+.ai-reasons {
+  margin: 0;
+  padding-left: 1.1rem;
+}
+
+.ai-reasons li {
+  margin-bottom: 0.65rem;
+}
+
+.ai-reasons li strong {
+  color: var(--text);
 }
 
 /* A 股：涨红跌绿 */
@@ -717,6 +919,102 @@ code {
   line-height: 1.35;
 }
 
+.kline-period-tabs {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.period-btn {
+  padding: 0.45rem 1rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface2);
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.period-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.period-btn.active {
+  background: var(--accent-dim);
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 500;
+}
+
+.period-btn:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.stock-detail .back-link {
+  display: inline-block;
+  margin-bottom: 0.75rem;
+  color: var(--accent);
+  text-decoration: none;
+  font-size: 0.9rem;
+}
+
+.stock-detail-head .stock-name {
+  font-weight: 400;
+  color: var(--muted);
+  font-size: 1rem;
+}
+
+.stock-price {
+  margin: 0.35rem 0 0;
+  font-size: 1.1rem;
+}
+
+.stock-price .chg {
+  margin-left: 0.75rem;
+  font-size: 0.95rem;
+}
+
+.stock-meta.compact {
+  padding: 0.85rem 1rem;
+  font-size: 0.85rem;
+  min-width: 200px;
+}
+
+.stock-meta.compact > div {
+  margin-bottom: 0.35rem;
+}
+
+.screen-reasons ul {
+  margin: 0.25rem 0 0;
+  padding-left: 1.1rem;
+}
+
+.stock-charts {
+  margin-top: 0.5rem;
+}
+
+.chart-legend,
+.macd-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  align-items: center;
+  font-size: 0.85rem;
+  margin-bottom: 0.5rem;
+}
+
+.chart-label {
+  font-size: 0.8rem;
+  color: var(--muted);
+  margin: 0.75rem 0 0.25rem;
+}
+
+.chart-pane {
+  width: 100%;
+}
+
 .stock-link {
   color: var(--accent);
   text-decoration: none;
@@ -796,10 +1094,58 @@ code {
   color: var(--muted);
 }
 
+.chart-pane-wrap {
+  position: relative;
+  width: 100%;
+}
+
 .chart-pane {
   width: 100%;
   border-radius: var(--radius);
   overflow: hidden;
+}
+
+.chart-legend-hint {
+  margin-left: 0.5rem;
+}
+
+.chart-crosshair-hint {
+  position: absolute;
+  z-index: 10;
+  pointer-events: none;
+  padding: 0.45rem 0.65rem;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  line-height: 1.45;
+  background: rgba(20, 26, 36, 0.92);
+  border: 1px solid var(--border);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 160px;
+}
+
+.chart-crosshair-hint .hint-date {
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.chart-crosshair-hint .hint-pct {
+  font-size: 0.9rem;
+  margin-top: 0.15rem;
+}
+
+.chart-crosshair-hint.up .hint-pct {
+  color: var(--red);
+}
+
+.chart-crosshair-hint.down .hint-pct {
+  color: var(--green);
+}
+
+.chart-crosshair-hint.flat .hint-pct {
+  color: var(--muted);
 }
 
 @media (max-width: 900px) {

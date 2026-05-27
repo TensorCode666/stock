@@ -6,6 +6,7 @@ const navItems = [
   { to: '/', label: '总览', end: true },
   { to: '/env', label: '市场环境' },
   { to: '/watchlist', label: '观察池' },
+  { to: '/favorites', label: '自选股' },
   { to: '/buy', label: '买入计划' },
   { to: '/position', label: '仓位计算' },
   { to: '/holdings', label: '持仓' },

@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   CandlestickSeries,
   ColorType,
@@ -9,7 +9,9 @@ import {
   type LogicalRange,
   type Time,
 } from 'lightweight-charts';
-import type { EnrichedBar } from '../lib/kline-indicators';
+import { formatChangePercent } from '../lib/market-api';
+import type { EnrichedBar, KlinePeriod } from '../lib/kline-indicators';
+import { KLINE_PERIOD_LABELS } from '../lib/kline-indicators';
 
 const MA_COLORS = {
   ma5: '#fbbf24',
@@ -19,6 +21,20 @@ const MA_COLORS = {
 
 function toTime(date: string): Time {
   return date.slice(0, 10) as Time;
+}
+
+type CrosshairHint = {
+  x: number;
+  y: number;
+  refPrice: number;
+  currentPrice: number;
+  changePct: number;
+  date?: string;
+};
+
+function pctVsCurrent(ref: number, current: number): number {
+  if (!ref) return 0;
+  return ((current - ref) / ref) * 100;
 }
 
 function syncCharts(charts: IChartApi[]) {
@@ -39,10 +55,27 @@ function syncCharts(charts: IChartApi[]) {
   };
 }
 
-export function StockChartPanels({ bars }: { bars: EnrichedBar[] }) {
+export function StockChartPanels({
+  bars,
+  period = 'day',
+  currentPrice,
+}: {
+  bars: EnrichedBar[];
+  period?: KlinePeriod;
+  /** 现价（实时报价）；未传则用最后一根 K 线收盘价 */
+  currentPrice?: number;
+}) {
+  const mainWrapRef = useRef<HTMLDivElement>(null);
   const mainRef = useRef<HTMLDivElement>(null);
   const volRef = useRef<HTMLDivElement>(null);
   const macdRef = useRef<HTMLDivElement>(null);
+  const [crosshairHint, setCrosshairHint] = useState<CrosshairHint | null>(
+    null
+  );
+
+  const latestClose = bars.length ? bars[bars.length - 1]!.close : 0;
+  const refCurrent =
+    currentPrice != null && currentPrice > 0 ? currentPrice : latestClose;
 
   useEffect(() => {
     if (!mainRef.current || !volRef.current || !macdRef.current || !bars.length) {
@@ -175,6 +208,42 @@ export function StockChartPanels({ bars }: { bars: EnrichedBar[] }) {
     const unsync = syncCharts(charts);
     charts.forEach((c) => c.timeScale().fitContent());
 
+    const barByTime = new Map(bars.map((b) => [b.date.slice(0, 10), b]));
+
+    const onCrosshairMove = (param: {
+      point?: { x: number; y: number };
+      time?: Time;
+    }) => {
+      if (!param.point || refCurrent <= 0) {
+        setCrosshairHint(null);
+        return;
+      }
+
+      const yPrice = candles.coordinateToPrice(param.point.y);
+      if (yPrice == null || !Number.isFinite(yPrice)) {
+        setCrosshairHint(null);
+        return;
+      }
+
+      let date: string | undefined;
+      if (param.time) {
+        const t = String(param.time).slice(0, 10);
+        date = barByTime.get(t)?.date.slice(0, 10) ?? t;
+      }
+
+      const changePct = pctVsCurrent(yPrice, refCurrent);
+      setCrosshairHint({
+        x: param.point.x,
+        y: param.point.y,
+        refPrice: yPrice,
+        currentPrice: refCurrent,
+        changePct,
+        date,
+      });
+    };
+
+    mainChart.subscribeCrosshairMove(onCrosshairMove);
+
     const onResize = () => {
       const w = mainRef.current?.clientWidth ?? 600;
       mainChart.applyOptions({ width: w });
@@ -185,13 +254,24 @@ export function StockChartPanels({ bars }: { bars: EnrichedBar[] }) {
     window.addEventListener('resize', onResize);
 
     return () => {
+      mainChart.unsubscribeCrosshairMove(onCrosshairMove);
       unsync();
       window.removeEventListener('resize', onResize);
       mainChart.remove();
       volChart.remove();
       macdChart.remove();
+      setCrosshairHint(null);
     };
-  }, [bars]);
+  }, [bars, refCurrent]);
+
+  const hintCls =
+    crosshairHint == null
+      ? ''
+      : crosshairHint.changePct > 0.001
+        ? 'up'
+        : crosshairHint.changePct < -0.001
+          ? 'down'
+          : 'flat';
 
   return (
     <div className="stock-charts">
@@ -199,9 +279,43 @@ export function StockChartPanels({ bars }: { bars: EnrichedBar[] }) {
         <span style={{ color: MA_COLORS.ma5 }}>MA5</span>
         <span style={{ color: MA_COLORS.ma20 }}>MA20</span>
         <span style={{ color: MA_COLORS.ma30 }}>MA30</span>
-        <span className="muted">K线红涨绿跌 · 前复权日线</span>
+        <span className="muted">
+          K线红涨绿跌 · 前复权{KLINE_PERIOD_LABELS[period]}
+        </span>
+        {refCurrent > 0 && (
+          <span className="muted chart-legend-hint">
+            十字光标价位对比现价（现价 {refCurrent.toFixed(2)}）
+          </span>
+        )}
       </div>
-      <div ref={mainRef} className="chart-pane" />
+      <div ref={mainWrapRef} className="chart-pane-wrap">
+        <div ref={mainRef} className="chart-pane" />
+        {crosshairHint && (
+          <div
+            className={`chart-crosshair-hint ${hintCls}`}
+            style={{
+              left: Math.min(
+                Math.max(crosshairHint.x + 12, 8),
+                (mainWrapRef.current?.clientWidth ?? 400) - 220
+              ),
+              top: Math.max(crosshairHint.y - 52, 8),
+            }}
+          >
+            {crosshairHint.date && (
+              <span className="hint-date">{crosshairHint.date}</span>
+            )}
+            <span className="hint-price">
+              光标 {crosshairHint.refPrice.toFixed(2)}
+            </span>
+            <span className="hint-vs">
+              现价 {crosshairHint.currentPrice.toFixed(2)}
+            </span>
+            <strong className="hint-pct">
+              较光标 {formatChangePercent(crosshairHint.changePct)}
+            </strong>
+          </div>
+        )}
+      </div>
       <p className="chart-label">成交量</p>
       <div ref={volRef} className="chart-pane" />
       <p className="chart-label">MACD (12, 26, 9)</p>

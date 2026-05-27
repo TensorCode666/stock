@@ -118,10 +118,20 @@ export interface DailyChecklistState {
   postMarket: Record<string, boolean>;
 }
 
+/** 自选股（与观察池独立，记录加入时价格） */
+export interface FavoriteStock {
+  id: string;
+  symbol: string;
+  name: string;
+  initialPrice: number;
+  addedAt: string;
+}
+
 export interface AppData {
   settings: UserSettings;
   envScores: MarketEnvScore[];
   watchlist: WatchlistItem[];
+  favorites: FavoriteStock[];
   tradePlans: TradePlan[];
   holdings: Holding[];
   trades: TradeRecord[];

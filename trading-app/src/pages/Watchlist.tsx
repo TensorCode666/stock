@@ -16,8 +16,15 @@ import {
   type ScreenCandidate,
   type ScreenProgress,
 } from '../lib/stock-screener';
+import { isFavorite } from '../lib/favorites';
+import {
+  createHoldingDraft,
+  findHoldingBySymbol,
+} from '../lib/holdings';
+import { fetchStockQuote } from '../lib/market-api';
+import { normalizeSymbol } from '../lib/symbols';
 import { newId, todayStr } from '../lib/storage';
-import type { TradeMode, WatchlistItem } from '../types';
+import type { Holding, TradeMode, WatchlistItem } from '../types';
 
 const SCORE_FIELDS = [
   { key: 'marketEnv' as const, label: '市场环境', max: 4 },
@@ -57,6 +64,7 @@ export function Watchlist() {
   const [progress, setProgress] = useState<ScreenProgress | null>(null);
   const [preview, setPreview] = useState<ScreenCandidate[]>([]);
   const [scanError, setScanError] = useState<string | null>(null);
+  const [buyDraft, setBuyDraft] = useState<Holding | null>(null);
 
   const todayEnv = data.envScores.find((e) => e.date === todayStr());
   const envTotal = todayEnv ? envScoreTotal(todayEnv) : 5;
@@ -126,6 +134,80 @@ export function Watchlist() {
     }));
   };
 
+  const openBuy = async (w: WatchlistItem) => {
+    const sym = normalizeSymbol(w.symbol);
+    if (!sym) {
+      alert('代码无效');
+      return;
+    }
+    let price = getQuote(sym)?.price ?? 0;
+    if (!price) {
+      const q = await fetchStockQuote(sym);
+      price = q?.price ?? 0;
+    }
+    if (!price) {
+      alert('无法获取现价，请稍后重试');
+      return;
+    }
+    setBuyDraft(createHoldingDraft(w, price, data.settings));
+    void refresh();
+  };
+
+  const confirmBuy = () => {
+    if (!buyDraft?.symbol.trim() || buyDraft.buyPrice <= 0) {
+      alert('请填写有效买入价');
+      return;
+    }
+    if (buyDraft.shares <= 0) {
+      alert('请填写买入股数');
+      return;
+    }
+    const sym = normalizeSymbol(buyDraft.symbol);
+    const existing = findHoldingBySymbol(data.holdings, sym);
+    if (existing && !confirm(`【${sym}】已有持仓记录，仍新增一条？`)) {
+      return;
+    }
+    setData((prev) => ({
+      ...prev,
+      holdings: [...prev.holdings, { ...buyDraft, symbol: sym }],
+    }));
+    setBuyDraft(null);
+    alert('已记入持仓，可在「持仓」页查看与编辑');
+    void refresh();
+  };
+
+  const addToFavorites = async (w: WatchlistItem) => {
+    const sym = normalizeSymbol(w.symbol);
+    if (!sym) return;
+    if (isFavorite(data.favorites, sym)) {
+      alert('该标的已在自选股中');
+      return;
+    }
+    let price = getQuote(sym)?.price ?? 0;
+    if (!price) {
+      const q = await fetchStockQuote(sym);
+      price = q?.price ?? 0;
+    }
+    if (!price) {
+      alert('无法获取现价，请稍后重试');
+      return;
+    }
+    setData((prev) => ({
+      ...prev,
+      favorites: [
+        ...prev.favorites,
+        {
+          id: newId(),
+          symbol: sym,
+          name: w.name,
+          initialPrice: price,
+          addedAt: new Date().toISOString(),
+        },
+      ],
+    }));
+    void refresh();
+  };
+
   const renderTable = (items: WatchlistItem[], title: string) => (
     <div className="watch-section">
       <h3>
@@ -152,6 +234,8 @@ export function Watchlist() {
             {items.map((w) => {
               const total = stockScoreTotal(w);
               const label = stockScoreLabel(total);
+              const inFav = isFavorite(data.favorites, w.symbol);
+              const inHold = !!findHoldingBySymbol(data.holdings, w.symbol);
               return (
                 <tr key={w.id}>
                   <td>
@@ -187,6 +271,21 @@ export function Watchlist() {
                   </td>
                   <td>{w.status === 'ready' ? '待买点' : '观察'}</td>
                   <td className="actions">
+                    <button
+                      type="button"
+                      className="btn sm primary"
+                      onClick={() => void openBuy(w)}
+                    >
+                      {inHold ? '加仓' : '买入'}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn sm accent"
+                      disabled={inFav}
+                      onClick={() => void addToFavorites(w)}
+                    >
+                      {inFav ? '已自选' : '加自选'}
+                    </button>
                     <button
                       type="button"
                       className="btn sm"
@@ -301,6 +400,108 @@ export function Watchlist() {
       {preview.length > 0 && !scanning && (
         <div className="card section ok-banner">
           本次扫描命中 {preview.length} 只，已写入观察池（手动添加的条目保留）
+        </div>
+      )}
+
+      {buyDraft && (
+        <div className="card section modal-panel buy-modal">
+          <h3>确认买入 · {buyDraft.symbol} {buyDraft.name}</h3>
+          <p className="small muted">
+            将写入「持仓」；买入价默认现价，止损/目标可按模式预填，提交后仍可修改。
+          </p>
+          <div className="form-grid">
+            <label className="field">
+              买入日期
+              <input
+                type="date"
+                value={buyDraft.buyDate}
+                onChange={(e) =>
+                  setBuyDraft({ ...buyDraft, buyDate: e.target.value })
+                }
+              />
+            </label>
+            <label className="field">
+              买入价
+              <input
+                type="number"
+                step="0.001"
+                value={buyDraft.buyPrice || ''}
+                onChange={(e) =>
+                  setBuyDraft({
+                    ...buyDraft,
+                    buyPrice: Number(e.target.value),
+                  })
+                }
+              />
+            </label>
+            <label className="field">
+              股数
+              <input
+                type="number"
+                step="100"
+                value={buyDraft.shares || ''}
+                onChange={(e) =>
+                  setBuyDraft({
+                    ...buyDraft,
+                    shares: Number(e.target.value),
+                  })
+                }
+              />
+            </label>
+            <label className="field">
+              止损价
+              <input
+                type="number"
+                step="0.001"
+                value={buyDraft.stopLoss || ''}
+                onChange={(e) =>
+                  setBuyDraft({
+                    ...buyDraft,
+                    stopLoss: Number(e.target.value),
+                  })
+                }
+              />
+            </label>
+            <label className="field">
+              目标价
+              <input
+                type="number"
+                step="0.001"
+                value={buyDraft.targetPrice || ''}
+                onChange={(e) =>
+                  setBuyDraft({
+                    ...buyDraft,
+                    targetPrice: Number(e.target.value),
+                  })
+                }
+              />
+            </label>
+          </div>
+          <label className="field">
+            卖出条件
+            <textarea
+              value={buyDraft.sellConditions}
+              onChange={(e) =>
+                setBuyDraft({ ...buyDraft, sellConditions: e.target.value })
+              }
+              rows={2}
+            />
+          </label>
+          <div className="btn-row">
+            <button type="button" className="btn primary" onClick={confirmBuy}>
+              确认买入
+            </button>
+            <button
+              type="button"
+              className="btn"
+              onClick={() => setBuyDraft(null)}
+            >
+              取消
+            </button>
+            <Link to="/holdings" className="btn-link">
+              查看持仓
+            </Link>
+          </div>
         </div>
       )}
 

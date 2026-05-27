@@ -9,6 +9,7 @@ const defaultData: AppData = {
   },
   envScores: [],
   watchlist: [],
+  favorites: [],
   tradePlans: [],
   holdings: [],
   trades: [],
@@ -19,8 +20,8 @@ export function loadData(): AppData {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return { ...defaultData };
-    const parsed = JSON.parse(raw) as AppData;
-    return { ...defaultData, ...parsed };
+    const parsed = JSON.parse(raw) as Partial<AppData>;
+    return { ...defaultData, ...parsed, favorites: parsed.favorites ?? [] };
   } catch {
     return { ...defaultData };
   }

@@ -50,8 +50,11 @@ export function MarketDataProvider({ children }: { children: ReactNode }) {
     for (const h of data.holdings) {
       set.add(normalizeSymbol(h.symbol));
     }
+    for (const f of data.favorites) {
+      set.add(normalizeSymbol(f.symbol));
+    }
     return [...set].filter(Boolean);
-  }, [data.watchlist, data.holdings]);
+  }, [data.watchlist, data.holdings, data.favorites]);
 
   const refresh = useCallback(async () => {
     setLoading(true);

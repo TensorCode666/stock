@@ -24,8 +24,26 @@ export interface EnrichedBar extends KlineBar {
   macd: MacdPoint | null;
 }
 
+export type KlinePeriod = 'day' | 'week' | 'month';
+
+export const KLINE_PERIOD_LABELS: Record<KlinePeriod, string> = {
+  day: '日线',
+  week: '周线',
+  month: '月线',
+};
+
+const PERIOD_CONFIG: Record<
+  KlinePeriod,
+  { apiKey: 'day' | 'week' | 'month'; dataKey: string; limit: number }
+> = {
+  day: { apiKey: 'day', dataKey: 'qfqday', limit: 120 },
+  week: { apiKey: 'week', dataKey: 'qfqweek', limit: 120 },
+  month: { apiKey: 'month', dataKey: 'qfqmonth', limit: 120 },
+};
+
 export interface StockChartData {
   symbol: string;
+  period: KlinePeriod;
   bars: EnrichedBar[];
 }
 
@@ -76,37 +94,55 @@ export function enrichBars(bars: KlineBar[]): EnrichedBar[] {
   }));
 }
 
-/** 腾讯前复权日 K，约 120 根 */
-export async function fetchDailyKlines(symbol: string): Promise<KlineBar[] | null> {
+function parseKlineRows(rows: string[][]): KlineBar[] {
+  return rows.map((r) => ({
+    date: r[0]!,
+    open: Number(r[1]),
+    close: Number(r[2]),
+    high: Number(r[3]),
+    low: Number(r[4]),
+    volume: Number(r[5]),
+  }));
+}
+
+/** 腾讯前复权 K 线（日 / 周 / 月） */
+export async function fetchKlines(
+  symbol: string,
+  period: KlinePeriod = 'day'
+): Promise<KlineBar[] | null> {
   const marketSymbol = symbolToTencentMarket(symbol);
   if (!marketSymbol) return null;
-  const url = `${QQ}/appstock/app/fqkline/get?param=${marketSymbol},day,,,120,qfq`;
+  const cfg = PERIOD_CONFIG[period];
+  const url = `${QQ}/appstock/app/fqkline/get?param=${marketSymbol},${cfg.apiKey},,,${cfg.limit},qfq`;
   try {
     const res = await fetch(url);
     if (!res.ok) return null;
     const json = (await res.json()) as {
-      data?: Record<string, { qfqday?: string[][] }>;
+      data?: Record<string, Record<string, string[][] | unknown>>;
     };
     const key = Object.keys(json.data ?? {})[0];
-    const rows = key ? json.data![key]?.qfqday : undefined;
+    if (!key) return null;
+    const block = json.data![key] as Record<string, string[][] | undefined>;
+    const rows = block[cfg.dataKey];
     if (!rows?.length) return null;
-    return rows.map((r) => ({
-      date: r[0]!,
-      open: Number(r[1]),
-      close: Number(r[2]),
-      high: Number(r[3]),
-      low: Number(r[4]),
-      volume: Number(r[5]),
-    }));
+    return parseKlineRows(rows);
   } catch {
     return null;
   }
 }
 
-export async function fetchStockChartData(symbol: string): Promise<StockChartData | null> {
+/** @deprecated 使用 fetchKlines(symbol, 'day') */
+export async function fetchDailyKlines(symbol: string): Promise<KlineBar[] | null> {
+  return fetchKlines(symbol, 'day');
+}
+
+export async function fetchStockChartData(
+  symbol: string,
+  period: KlinePeriod = 'day'
+): Promise<StockChartData | null> {
   const code = normalizeSymbol(symbol);
   if (!code) return null;
-  const bars = await fetchDailyKlines(code);
+  const bars = await fetchKlines(code, period);
   if (!bars?.length) return null;
-  return { symbol: code, bars: enrichBars(bars) };
+  return { symbol: code, period, bars: enrichBars(bars) };
 }

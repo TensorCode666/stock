@@ -2,6 +2,11 @@ import { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { useMarketData } from '../context/MarketDataContext';
 import { envScoreLabel, envScoreTotal } from '../lib/calculations';
+import {
+  DIM_LABELS,
+  scoreMarketEnvWithAi,
+  type MarketEnvAiResult,
+} from '../lib/market-env-ai';
 import { suggestEnvScores } from '../lib/market-api';
 import { todayStr } from '../lib/storage';
 import type { MarketEnvScore } from '../types';
@@ -36,15 +41,44 @@ const emptyScore = (): MarketEnvScore => ({
 
 export function MarketEnv() {
   const { data, setData } = useApp();
-  const { indices, breadth } = useMarketData();
+  const { indices, breadth, loading: marketLoading } = useMarketData();
   const existing = data.envScores.find((e) => e.date === todayStr());
   const [form, setForm] = useState<MarketEnvScore>(existing ?? emptyScore());
+  const [aiResult, setAiResult] = useState<MarketEnvAiResult | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
 
   const total = envScoreTotal(form);
   const info = envScoreLabel(total);
 
   const setDim = (key: keyof MarketEnvScore, value: 0 | 1 | 2) => {
     setForm((f) => ({ ...f, [key]: value }));
+  };
+
+  const runAiScore = () => {
+    if (!indices.length) {
+      alert('请先等待行情加载完成');
+      return;
+    }
+    setAiLoading(true);
+    const result = scoreMarketEnvWithAi(indices, breadth);
+    setAiLoading(false);
+    if (!result) {
+      alert('无法生成评分，请稍后重试');
+      return;
+    }
+    setAiResult(result);
+    setForm((f) => ({
+      ...f,
+      indexTrend: result.indexTrend,
+      mainSector: result.mainSector,
+      profitEffect: result.profitEffect,
+      emotionCycle: result.emotionCycle,
+      volume: result.volume,
+      emotionStage: result.emotionStage,
+      notes: [f.notes, `【AI 评分 ${result.totalScore}/10】${result.summary}`]
+        .filter(Boolean)
+        .join('\n'),
+    }));
   };
 
   const save = () => {
@@ -119,25 +153,63 @@ export function MarketEnv() {
             />
           </label>
 
-          {indices.length > 0 && (
+          <div className="btn-row">
             <button
               type="button"
-              className="btn"
-              onClick={() => {
-                const s = suggestEnvScores(indices, breadth);
-                setForm((f) => ({
-                  ...f,
-                  indexTrend: s.indexTrend,
-                  profitEffect: s.profitEffect,
-                  volume: s.volume,
-                  notes: [f.notes, `【行情参考】${s.hint}`]
-                    .filter(Boolean)
-                    .join('\n'),
-                }));
-              }}
+              className="btn primary"
+              disabled={aiLoading || marketLoading || !indices.length}
+              onClick={runAiScore}
             >
-              根据实时行情填充建议分
+              {aiLoading ? 'AI 分析中…' : 'AI 智能评分'}
             </button>
+            {indices.length > 0 && (
+              <button
+                type="button"
+                className="btn"
+                onClick={() => {
+                  const s = suggestEnvScores(indices, breadth);
+                  setForm((f) => ({
+                    ...f,
+                    indexTrend: s.indexTrend,
+                    profitEffect: s.profitEffect,
+                    volume: s.volume,
+                    notes: [f.notes, `【行情参考】${s.hint}`]
+                      .filter(Boolean)
+                      .join('\n'),
+                  }));
+                }}
+              >
+                快速填充（仅 3 项）
+              </button>
+            )}
+          </div>
+
+          {aiResult && (
+            <div className="ai-score-panel card">
+              <h4>AI 评分说明（可手调后保存）</h4>
+              <p className="ai-summary">{aiResult.summary}</p>
+              <ul className="ai-reasons">
+                {(
+                  [
+                    'indexTrend',
+                    'mainSector',
+                    'profitEffect',
+                    'emotionCycle',
+                    'volume',
+                  ] as const
+                ).map((key) => (
+                  <li key={key}>
+                    <strong>
+                      {DIM_LABELS[key]}：{aiResult[key]} 分
+                    </strong>
+                    <span className="block small">{aiResult.reasons[key]}</span>
+                  </li>
+                ))}
+              </ul>
+              <p className="small muted">
+                建议情绪阶段：{aiResult.emotionStage}（已写入表单，可修改）
+              </p>
+            </div>
           )}
 
           <button type="button" className="btn primary" onClick={save}>

@@ -11,6 +11,7 @@ import { MarketEnv } from './pages/MarketEnv';
 import { PositionCalc } from './pages/PositionCalc';
 import { Rules } from './pages/Rules';
 import { StockDetail } from './pages/StockDetail';
+import { Favorites } from './pages/Favorites';
 import { Watchlist } from './pages/Watchlist';
 
 export default function App() {
@@ -23,6 +24,7 @@ export default function App() {
             <Route index element={<Dashboard />} />
             <Route path="env" element={<MarketEnv />} />
             <Route path="watchlist" element={<Watchlist />} />
+            <Route path="favorites" element={<Favorites />} />
             <Route path="stock/:symbol" element={<StockDetail />} />
             <Route path="buy" element={<BuyPlan />} />
             <Route path="position" element={<PositionCalc />} />

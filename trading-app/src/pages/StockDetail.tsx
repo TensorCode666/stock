@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
 import { StockChartPanels } from '../components/StockChartPanels';
+import { StockQuoteHero } from '../components/StockQuoteHero';
 import { useApp } from '../context/AppContext';
 import { useMarketData } from '../context/MarketDataContext';
 import {
@@ -8,14 +9,13 @@ import {
   stockScoreTotal,
   TRADE_MODE_LABELS,
 } from '../lib/calculations';
-import { fetchStockChartData } from '../lib/kline-indicators';
-import type { EnrichedBar } from '../lib/kline-indicators';
 import {
-  changeClass,
-  fetchStockQuote,
-  formatChangePercent,
-  type StockQuote,
-} from '../lib/market-api';
+  fetchStockChartData,
+  KLINE_PERIOD_LABELS,
+  type EnrichedBar,
+  type KlinePeriod,
+} from '../lib/kline-indicators';
+import { fetchStockQuote, type StockQuote } from '../lib/market-api';
 import { normalizeSymbol } from '../lib/symbols';
 
 type LocationState = {
@@ -42,6 +42,7 @@ export function StockDetail() {
   );
 
   const displayName = watchItem?.name || state.name || symbol;
+  const [period, setPeriod] = useState<KlinePeriod>('day');
   const [bars, setBars] = useState<EnrichedBar[]>([]);
   const [quote, setQuote] = useState<StockQuote | undefined>(() =>
     symbol ? getQuote(symbol) : undefined
@@ -56,24 +57,33 @@ export function StockDetail() {
     setError(null);
 
     void (async () => {
-      const [chart, q] = await Promise.all([
-        fetchStockChartData(symbol),
-        getQuote(symbol) ? Promise.resolve(getQuote(symbol)!) : fetchStockQuote(symbol),
-      ]);
+      const chart = await fetchStockChartData(symbol, period);
       if (cancelled) return;
       if (!chart?.bars.length) {
-        setError('K 线数据加载失败，请检查网络或稍后重试');
+        setError(
+          `${KLINE_PERIOD_LABELS[period]}数据加载失败，请检查网络或稍后重试`
+        );
         setBars([]);
       } else {
         setBars(chart.bars);
+        setError(null);
       }
-      if (q) setQuote(q);
       setLoading(false);
     })();
 
     return () => {
       cancelled = true;
     };
+  }, [symbol, period]);
+
+  useEffect(() => {
+    if (!symbol) return;
+    void (async () => {
+      const q = getQuote(symbol)
+        ? getQuote(symbol)!
+        : await fetchStockQuote(symbol);
+      if (q) setQuote(q);
+    })();
   }, [symbol, getQuote]);
 
   useEffect(() => {
@@ -94,8 +104,6 @@ export function StockDetail() {
     );
   }
 
-  const price = quote?.price;
-  const chg = quote?.changePercent ?? 0;
   const scoreTotal = watchItem ? stockScoreTotal(watchItem) : null;
 
   return (
@@ -105,24 +113,7 @@ export function StockDetail() {
           ← 返回观察池
         </Link>
         <div className="stock-detail-head row-between">
-          <div>
-            <h2>
-              {symbol}{' '}
-              <span className="stock-name">{displayName}</span>
-            </h2>
-            {price != null && price > 0 ? (
-              <p className={`stock-price ${changeClass(chg)}`}>
-                <strong>{price.toFixed(2)}</strong>
-                <span className="chg">
-                  {quote?.changeAmount != null && quote.changeAmount >= 0 ? '+' : ''}
-                  {quote?.changeAmount?.toFixed(2) ?? '—'} (
-                  {formatChangePercent(chg)})
-                </span>
-              </p>
-            ) : (
-              <p className="muted">现价加载中…</p>
-            )}
-          </div>
+          <StockQuoteHero symbol={symbol} name={displayName} quote={quote} />
           {watchItem && (
             <div className="stock-meta card compact">
               <div>
@@ -160,11 +151,31 @@ export function StockDetail() {
         </div>
       </header>
 
+      <div className="kline-period-tabs">
+        {(['day', 'week', 'month'] as const).map((p) => (
+          <button
+            key={p}
+            type="button"
+            className={period === p ? 'period-btn active' : 'period-btn'}
+            disabled={loading && period === p}
+            onClick={() => setPeriod(p)}
+          >
+            {KLINE_PERIOD_LABELS[p]}
+          </button>
+        ))}
+      </div>
+
       {error && <div className="market-error">{error}</div>}
 
       {loading && <p className="muted">图表加载中…</p>}
 
-      {!loading && bars.length > 0 && <StockChartPanels bars={bars} />}
+      {!loading && bars.length > 0 && (
+        <StockChartPanels
+          bars={bars}
+          period={period}
+          currentPrice={quote?.price}
+        />
+      )}
     </div>
   );
 }
