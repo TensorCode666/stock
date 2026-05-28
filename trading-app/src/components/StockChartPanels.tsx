@@ -76,6 +76,11 @@ export function StockChartPanels({
   const latestClose = bars.length ? bars[bars.length - 1]!.close : 0;
   const refCurrent =
     currentPrice != null && currentPrice > 0 ? currentPrice : latestClose;
+  const priceRef = useRef(refCurrent);
+
+  useEffect(() => {
+    priceRef.current = refCurrent;
+  }, [refCurrent]);
 
   useEffect(() => {
     if (!mainRef.current || !volRef.current || !macdRef.current || !bars.length) {
@@ -214,7 +219,8 @@ export function StockChartPanels({
       point?: { x: number; y: number };
       time?: Time;
     }) => {
-      if (!param.point || refCurrent <= 0) {
+      const livePrice = priceRef.current;
+      if (!param.point || livePrice <= 0) {
         setCrosshairHint(null);
         return;
       }
@@ -231,12 +237,12 @@ export function StockChartPanels({
         date = barByTime.get(t)?.date.slice(0, 10) ?? t;
       }
 
-      const changePct = pctVsCurrent(yPrice, refCurrent);
+      const changePct = pctVsCurrent(yPrice, livePrice);
       setCrosshairHint({
         x: param.point.x,
         y: param.point.y,
         refPrice: yPrice,
-        currentPrice: refCurrent,
+        currentPrice: livePrice,
         changePct,
         date,
       });
@@ -262,7 +268,7 @@ export function StockChartPanels({
       macdChart.remove();
       setCrosshairHint(null);
     };
-  }, [bars, refCurrent]);
+  }, [bars, period]);
 
   const hintCls =
     crosshairHint == null
@@ -294,10 +300,7 @@ export function StockChartPanels({
           <div
             className={`chart-crosshair-hint ${hintCls}`}
             style={{
-              left: Math.min(
-                Math.max(crosshairHint.x + 12, 8),
-                (mainWrapRef.current?.clientWidth ?? 400) - 220
-              ),
+              left: Math.min(Math.max(crosshairHint.x + 12, 8), 720),
               top: Math.max(crosshairHint.y - 52, 8),
             }}
           >

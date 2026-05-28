@@ -1,3 +1,4 @@
+import { useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { QuoteCell } from '../components/QuoteCell';
 import { useApp } from '../context/AppContext';
@@ -7,10 +8,15 @@ import {
   envScoreTotal,
   stockScoreTotal,
 } from '../lib/calculations';
+import {
+  downloadAppData,
+  importAppDataFromFile,
+} from '../lib/data-backup';
 import { todayStr } from '../lib/storage';
 
 export function Dashboard() {
-  const { data } = useApp();
+  const { data, setData } = useApp();
+  const importRef = useRef<HTMLInputElement>(null);
   const { getQuote } = useMarketData();
   const today = todayStr();
   const todayEnv = [...data.envScores]
@@ -98,8 +104,24 @@ export function Dashboard() {
             <tbody>
               {activeWatch.slice(0, 8).map((w) => (
                 <tr key={w.id}>
-                  <td>{w.symbol}</td>
-                  <td>{w.name}</td>
+                  <td>
+                    <Link
+                      to={`/stock/${w.symbol}`}
+                      state={{ name: w.name, watchlistId: w.id }}
+                      className="stock-link"
+                    >
+                      {w.symbol}
+                    </Link>
+                  </td>
+                  <td>
+                    <Link
+                      to={`/stock/${w.symbol}`}
+                      state={{ name: w.name, watchlistId: w.id }}
+                      className="stock-link"
+                    >
+                      {w.name}
+                    </Link>
+                  </td>
                   <td>{w.mode}</td>
                   <td>{stockScoreTotal(w)}/20</td>
                   <td>
@@ -112,6 +134,50 @@ export function Dashboard() {
           </table>
         </section>
       )}
+
+      <section className="card section">
+        <h3>数据备份</h3>
+        <p className="small muted">
+          计划、持仓、复盘等保存在本机浏览器。可导出 JSON 备份，换设备或清缓存后导入恢复。
+        </p>
+        <div className="btn-row">
+          <button
+            type="button"
+            className="btn"
+            onClick={() => downloadAppData(data)}
+          >
+            导出备份
+          </button>
+          <button
+            type="button"
+            className="btn"
+            onClick={() => importRef.current?.click()}
+          >
+            导入备份
+          </button>
+          <input
+            ref={importRef}
+            type="file"
+            accept="application/json,.json"
+            hidden
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (!file) return;
+              void importAppDataFromFile(file)
+                .then((next) => {
+                  setData(next);
+                  alert('导入成功');
+                })
+                .catch((err) => {
+                  alert(err instanceof Error ? err.message : '导入失败');
+                })
+                .finally(() => {
+                  e.target.value = '';
+                });
+            }}
+          />
+        </div>
+      </section>
 
       <section className="card section flow">
         <h3>标准交易流程</h3>

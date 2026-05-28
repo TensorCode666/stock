@@ -16,7 +16,7 @@ const navItems = [
 ];
 
 function MarketBar() {
-  const { indices, breadth, loading, refresh, lastUpdated, error } =
+  const { indices, breadth, loading, refreshing, refresh, lastUpdated, error } =
     useMarketData();
   return (
     <>
@@ -28,6 +28,7 @@ function MarketBar() {
       <MarketIndices
         indices={indices}
         loading={loading}
+        refreshing={refreshing}
         onRefresh={() => void refresh()}
         lastUpdated={lastUpdated}
       />

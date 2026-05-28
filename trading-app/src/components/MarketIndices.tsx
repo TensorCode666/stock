@@ -7,11 +7,13 @@ import {
 export function MarketIndices({
   indices,
   loading,
+  refreshing,
   onRefresh,
   lastUpdated,
 }: {
   indices: IndexQuote[];
   loading: boolean;
+  refreshing?: boolean;
   onRefresh?: () => void;
   lastUpdated?: Date | null;
 }) {
@@ -29,9 +31,9 @@ export function MarketIndices({
             type="button"
             className="btn sm"
             onClick={onRefresh}
-            disabled={loading}
+            disabled={loading || refreshing}
           >
-            {loading ? '刷新中…' : '刷新'}
+            {loading || refreshing ? '刷新中…' : '刷新'}
           </button>
         )}
       </div>

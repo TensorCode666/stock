@@ -28,7 +28,7 @@ export function StockDetail() {
   const location = useLocation();
   const state = (location.state ?? {}) as LocationState;
   const { data } = useApp();
-  const { getQuote, refresh } = useMarketData();
+  const { getQuote } = useMarketData();
 
   const symbol = normalizeSymbol(symbolParam ?? '');
   const watchItem = useMemo(
@@ -85,10 +85,6 @@ export function StockDetail() {
       if (q) setQuote(q);
     })();
   }, [symbol, getQuote]);
-
-  useEffect(() => {
-    if (symbol) void refresh();
-  }, [symbol, refresh]);
 
   useEffect(() => {
     const q = getQuote(symbol);

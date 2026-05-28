@@ -96,19 +96,23 @@ export function Watchlist() {
       setPreview(results);
       if (results.length === 0) {
         setScanError('当前暂无符合规则的股票，可稍后重试或放宽环境后再扫');
-        return;
       }
-      setData((prev) => ({
-        ...prev,
-        watchlist: mergeCandidatesToWatchlist(prev.watchlist, results),
-      }));
-      await refresh();
     } catch (e) {
       setScanError(e instanceof Error ? e.message : '扫描失败');
     } finally {
       setScanning(false);
       setProgress(null);
     }
+  };
+
+  const confirmMergeScan = () => {
+    if (preview.length === 0) return;
+    setData((prev) => ({
+      ...prev,
+      watchlist: mergeCandidatesToWatchlist(prev.watchlist, preview),
+    }));
+    setPreview([]);
+    void refresh();
   };
 
   const saveItem = () => {
@@ -398,8 +402,36 @@ export function Watchlist() {
       {scanError && <div className="market-error">{scanError}</div>}
 
       {preview.length > 0 && !scanning && (
-        <div className="card section ok-banner">
-          本次扫描命中 {preview.length} 只，已写入观察池（手动添加的条目保留）
+        <div className="card section scan-preview-banner">
+          <p>
+            扫描命中 <strong>{preview.length}</strong> 只，确认后写入观察池（手动条目保留）
+          </p>
+          <ul className="scan-preview-list small">
+            {preview.slice(0, 12).map((c) => (
+              <li key={c.symbol}>
+                {c.symbol} {c.name} · {c.totalScore}/20
+              </li>
+            ))}
+            {preview.length > 12 && (
+              <li className="muted">…另有 {preview.length - 12} 只</li>
+            )}
+          </ul>
+          <div className="btn-row">
+            <button
+              type="button"
+              className="btn primary"
+              onClick={confirmMergeScan}
+            >
+              确认写入观察池
+            </button>
+            <button
+              type="button"
+              className="btn"
+              onClick={() => setPreview([])}
+            >
+              放弃本次结果
+            </button>
+          </div>
         </div>
       )}
 

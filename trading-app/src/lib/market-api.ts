@@ -51,9 +51,12 @@ export interface MarketBreadth {
 
 const INDEX_SECIDS = '1.000001,0.399001,0.399006';
 
+const FETCH_TIMEOUT_MS = 12_000;
+
 async function fetchJson<T>(url: string): Promise<T> {
   const res = await fetch(url, {
     headers: { Accept: 'application/json' },
+    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
   });
   if (!res.ok) throw new Error(`行情请求失败: ${res.status}`);
   return res.json() as Promise<T>;
@@ -326,7 +329,7 @@ export async function searchStocks(
   const q = keyword.trim();
   if (!q) return [];
   const url = `${EM_SEARCH}/api/suggest/get?input=${encodeURIComponent(q)}&type=14&count=10`;
-  const json = await fetchJson<{
+  const json = await fetchJsonSafe<{
     QuotationCodeTable?: {
       Data?: {
         Code: string;
@@ -336,6 +339,7 @@ export async function searchStocks(
       }[];
     };
   }>(url);
+  if (!json) return [];
   const rows = json.QuotationCodeTable?.Data ?? [];
   return rows
     .filter((r) => r.Code && r.QuoteID)

@@ -35,8 +35,7 @@ jobs:
       - name: Build
         working-directory: trading-app
         env:
-          # 仓库名 stock → https://<user>.github.io/stock/
-          VITE_BASE: /stock/
+          VITE_BASE: /${{ github.event.repository.name }}/
         run: npm run build
 
       - name: Upload artifact

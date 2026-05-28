@@ -907,6 +907,18 @@ code {
   transition: width 0.2s;
 }
 
+.scan-preview-banner {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, var(--card));
+}
+
+.scan-preview-list {
+  margin: 0.5rem 0 0.75rem;
+  padding-left: 1.1rem;
+  max-height: 160px;
+  overflow-y: auto;
+}
+
 .ok-banner {
   color: var(--green);
   font-size: 0.9rem;

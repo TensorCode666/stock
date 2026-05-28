@@ -87,10 +87,22 @@ async function fetchLiquidUniverse(pages = 3, pageSize = 50): Promise<SinaRow[]>
   const all: SinaRow[] = [];
   for (let page = 1; page <= pages; page++) {
     const url = `${SINA}/quotes_service/api/json_v2.php/Market_Center.getHQNodeData?page=${page}&num=${pageSize}&sort=amount&asc=0&node=hs_a`;
-    const res = await fetch(url);
-    const rows = (await res.json()) as SinaRow[];
-    if (!Array.isArray(rows)) break;
-    all.push(...rows);
+    try {
+      const res = await fetch(url, {
+        signal: AbortSignal.timeout(12_000),
+      });
+      if (!res.ok) continue;
+      const rows = (await res.json()) as SinaRow[];
+      if (!Array.isArray(rows)) break;
+      all.push(...rows);
+    } catch {
+      if (all.length === 0 && page === 1) {
+        throw new Error(
+          '无法获取全市场列表（网络或跨域限制）。请用本地 npm run dev，或稍后重试。'
+        );
+      }
+      break;
+    }
   }
   return all.filter((r) => r.code && r.name && !isStName(r.name));
 }
