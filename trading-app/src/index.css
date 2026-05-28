@@ -763,6 +763,15 @@ code {
   font-size: 0.85rem;
 }
 
+.breadth-scope {
+  font-size: 0.8rem;
+  margin-right: 0.25rem;
+}
+
+.breadth-total {
+  font-size: 0.8rem;
+}
+
 .breadth-bar .up {
   color: var(--red);
 }

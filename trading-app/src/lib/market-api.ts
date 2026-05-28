@@ -44,6 +44,9 @@ export interface MarketBreadth {
   down: number;
   flat: number;
   upRatio: number;
+  /** 统计口径说明 */
+  scope: string;
+  total: number;
 }
 
 const INDEX_SECIDS = '1.000001,0.399001,0.399006';
@@ -172,19 +175,59 @@ export async function fetchIndices(): Promise<IndexQuote[]> {
     }));
 }
 
+/**
+ * 涨跌家数：合并上交所（000001）+ 深证综指（399106）口径。
+ * 此前仅用上证指数 ≈ 仅沪市 ~2300 只；合并后接近沪深 A 股全市场 ~5000+。
+ */
+const BREADTH_SECIDS = '1.000001,0.399106';
+
 export async function fetchMarketBreadth(): Promise<MarketBreadth | null> {
-  const indices = await fetchIndices();
-  const sh = indices.find((i) => i.code === '000001');
-  if (!sh?.upCount || sh.downCount == null) return null;
-  const up = sh.upCount;
-  const down = sh.downCount;
-  const flat = sh.flatCount ?? 0;
+  const fields = 'f12,f14,f104,f105,f106';
+  const url = `${EM}/api/qt/ulist.np/get?fltt=2&fields=${fields}&secids=${BREADTH_SECIDS}`;
+  const json = await fetchJsonSafe<EmListResp>(url);
+  const list = json?.data?.diff ?? [];
+
+  let up = 0;
+  let down = 0;
+  let flat = 0;
+
+  for (const row of list) {
+    const u = Number(row.f104) || 0;
+    const d = Number(row.f105) || 0;
+    const f = Number(row.f106) || 0;
+    if (u + d + f === 0) continue;
+    up += u;
+    down += d;
+    flat += f;
+  }
+
+  // 合并接口失败时回退：仅上证（数量偏少，但优于无数据）
+  if (up + down + flat === 0) {
+    const indices = await fetchIndices();
+    const sh = indices.find((i) => i.code === '000001');
+    if (!sh?.upCount || sh.downCount == null) return null;
+    up = sh.upCount;
+    down = sh.downCount;
+    flat = sh.flatCount ?? 0;
+    const total = up + down + flat;
+    return {
+      up,
+      down,
+      flat,
+      total,
+      upRatio: total > 0 ? up / total : 0,
+      scope: '沪市（上证口径，不含深市）',
+    };
+  }
+
   const total = up + down + flat;
   return {
     up,
     down,
     flat,
+    total,
     upRatio: total > 0 ? up / total : 0,
+    scope: '沪深A股（沪+深，不含北交所）',
   };
 }
 

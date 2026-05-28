@@ -36,6 +36,8 @@ function MarketBar() {
           up={breadth.up}
           down={breadth.down}
           flat={breadth.flat}
+          scope={breadth.scope}
+          total={breadth.total}
         />
       )}
     </>

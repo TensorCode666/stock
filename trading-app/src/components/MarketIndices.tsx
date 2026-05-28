@@ -57,26 +57,33 @@ export function MarketBreadthBar({
   up,
   down,
   flat,
+  scope,
+  total,
 }: {
   up: number;
   down: number;
   flat: number;
+  scope?: string;
+  total?: number;
 }) {
-  const total = up + down + flat || 1;
+  const displayTotal = total ?? up + down + flat;
+  const sum = displayTotal || 1;
   return (
     <div className="breadth-bar">
+      {scope && <span className="breadth-scope muted">{scope}</span>}
       <span className="up">涨 {up}</span>
       <span className="flat">平 {flat}</span>
       <span className="down">跌 {down}</span>
+      <span className="breadth-total muted">共 {displayTotal}</span>
       <div className="breadth-track">
-        <div className="seg-up" style={{ width: `${(up / total) * 100}%` }} />
+        <div className="seg-up" style={{ width: `${(up / sum) * 100}%` }} />
         <div
           className="seg-flat"
-          style={{ width: `${(flat / total) * 100}%` }}
+          style={{ width: `${(flat / sum) * 100}%` }}
         />
         <div
           className="seg-down"
-          style={{ width: `${(down / total) * 100}%` }}
+          style={{ width: `${(down / sum) * 100}%` }}
         />
       </div>
     </div>
