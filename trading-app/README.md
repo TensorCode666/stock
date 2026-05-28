@@ -33,6 +33,17 @@ npm run dev
 
 浏览器打开终端提示的地址（一般为 http://localhost:5173）。
 
+## 部署（GitHub Pages）
+
+根目录已配置 GitHub Actions，详见仓库根 [README.md](../README.md#部署到-github-pagesgithub-actions)。
+
+本地按 Pages 路径预览：
+
+```bash
+VITE_BASE=/stock/ npm run build
+npm run preview
+```
+
 ## 建议使用顺序
 
 1. **盘前**：市场环境评分 → 每日清单（盘前）

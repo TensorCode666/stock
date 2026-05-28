@@ -55,6 +55,8 @@ const emProxy = {
 
 // https://vite.dev/config/
 export default defineConfig({
+  /** GitHub Pages 部署时设为 /stock/；本地开发默认 / */
+  base: process.env.VITE_BASE || '/',
   plugins: [react()],
   server: { proxy: emProxy },
   preview: { proxy: emProxy },

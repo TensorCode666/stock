@@ -207,6 +207,42 @@ stock/
 
 具体命令见 [`trading-app/README.md`](trading-app/README.md)（仅启动说明，偏操作步骤）。
 
+---
+
+## 部署到 GitHub Pages（GitHub Actions）
+
+仓库已包含 [`.github/workflows/deploy-pages.yml`](.github/workflows/deploy-pages.yml)，推送 `main` 后会自动构建 `trading-app` 并发布静态站点。
+
+### 一次性设置（在 GitHub 网页操作）
+
+1. 打开仓库 **Settings → Pages**
+2. **Build and deployment → Source** 选择 **GitHub Actions**（不要选 Deploy from a branch）
+3. 保存后，推送一次 `main`，或到 **Actions** 页手动运行 **Deploy to GitHub Pages**
+
+### 访问地址
+
+部署成功后（约 1～3 分钟）：
+
+**https://tensorcode666.github.io/stock/**
+
+（若仓库改名，路径中的 `stock` 需与仓库名一致，并同步修改 workflow 里的 `VITE_BASE`。）
+
+### 本地模拟 Pages 构建
+
+```bash
+cd trading-app
+npm ci
+VITE_BASE=/stock/ npm run build
+npm run preview -- --port 4173
+```
+
+浏览器打开 http://localhost:4173/stock/
+
+### 说明
+
+- 线上环境**没有** Vite 开发代理，行情走代码里配置的公开接口（东方财富 / 腾讯）；若浏览器 CORS 限制导致部分接口失败，属静态站点常见情况，本地 `npm run dev` 仍可用代理。
+- 交易数据仍在浏览器 **localStorage**，换设备或清缓存会丢失，请自行备份重要记录。
+
 重新生成 README 配图（可选）：
 
 ```bash
