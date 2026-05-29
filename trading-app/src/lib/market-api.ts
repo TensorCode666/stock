@@ -4,6 +4,8 @@ const EM =
   import.meta.env.DEV ? '/api/em' : 'https://push2.eastmoney.com';
 const EM_SEARCH =
   import.meta.env.DEV ? '/api/em-search' : 'https://searchapi.eastmoney.com';
+const SMARTBOX =
+  import.meta.env.DEV ? '/api/smartbox' : 'https://smartbox.gtimg.cn';
 const QT = import.meta.env.DEV ? '/api/qt' : 'https://qt.gtimg.cn';
 
 export interface IndexQuote {
@@ -322,25 +324,23 @@ function rowToQuote(
   };
 }
 
-/** 搜索 A 股 / ETF */
-export async function searchStocks(
-  keyword: string
-): Promise<StockSearchResult[]> {
-  const q = keyword.trim();
-  if (!q) return [];
-  const url = `${EM_SEARCH}/api/suggest/get?input=${encodeURIComponent(q)}&type=14&count=10`;
-  const json = await fetchJsonSafe<{
-    QuotationCodeTable?: {
-      Data?: {
-        Code: string;
-        Name: string;
-        QuoteID: string;
-        SecurityTypeName?: string;
-      }[];
-    };
-  }>(url);
-  if (!json) return [];
-  const rows = json.QuotationCodeTable?.Data ?? [];
+type EastmoneySearchResponse = {
+  QuotationCodeTable?: {
+    Data?: {
+      Code: string;
+      Name: string;
+      QuoteID: string;
+      SecurityTypeName?: string;
+    }[];
+  };
+};
+
+function mapEastmoneySearchRows(
+  rows: NonNullable<
+    NonNullable<EastmoneySearchResponse['QuotationCodeTable']>['Data']
+  > | undefined
+): StockSearchResult[] {
+  if (!rows?.length) return [];
   return rows
     .filter((r) => r.Code && r.QuoteID)
     .map((r) => ({
@@ -349,6 +349,103 @@ export async function searchStocks(
       secid: r.QuoteID,
       market: r.SecurityTypeName ?? '',
     }));
+}
+
+/** 浏览器 JSONP（绕过 searchapi 无 CORS / 代理 404） */
+function fetchJsonp<T>(url: string, callbackParam = 'cb'): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const cbName = `jsonp_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const script = document.createElement('script');
+    let timer: ReturnType<typeof window.setTimeout>;
+
+    const cleanup = (err?: Error, data?: T) => {
+      window.clearTimeout(timer);
+      Reflect.deleteProperty(window, cbName);
+      script.remove();
+      if (err) reject(err);
+      else resolve(data as T);
+    };
+
+    timer = window.setTimeout(() => {
+      cleanup(new Error('搜索请求超时'));
+    }, FETCH_TIMEOUT_MS);
+
+    Reflect.set(window, cbName, (data: T) => cleanup(undefined, data));
+    const sep = url.includes('?') ? '&' : '?';
+    script.src = `${url}${sep}${callbackParam}=${cbName}`;
+    script.onerror = () => cleanup(new Error('搜索请求失败'));
+    document.head.appendChild(script);
+  });
+}
+
+function parseSmartboxResponse(text: string): StockSearchResult[] {
+  const m = text.match(/v_hint="([^"]+)"/);
+  if (!m?.[1]) return [];
+  return m[1]
+    .split('^')
+    .map((item) => {
+      const [market, symbol, name] = item.split('~');
+      if (!symbol || !name) return null;
+      const secid = market === 'sh' ? `1.${symbol}` : `0.${symbol}`;
+      return {
+        symbol,
+        name,
+        secid,
+        market:
+          market === 'sh' ? '沪A' : market === 'sz' ? '深A' : market ?? '',
+      };
+    })
+    .filter((r): r is StockSearchResult => r != null);
+}
+
+async function searchStocksEastmoney(keyword: string): Promise<StockSearchResult[]> {
+  const q = keyword.trim();
+  if (!q) return [];
+
+  const jsonpUrl = `https://searchapi.eastmoney.com/api/suggest/get?input=${encodeURIComponent(q)}&type=14&count=10`;
+  try {
+    const json = await fetchJsonp<EastmoneySearchResponse>(jsonpUrl);
+    const rows = mapEastmoneySearchRows(json.QuotationCodeTable?.Data);
+    if (rows.length) return rows;
+  } catch {
+    /* fall through */
+  }
+
+  const proxyUrl = `${EM_SEARCH}/api/suggest/get?input=${encodeURIComponent(q)}&type=14&count=10`;
+  const json = await fetchJsonSafe<EastmoneySearchResponse>(proxyUrl);
+  return mapEastmoneySearchRows(json?.QuotationCodeTable?.Data);
+}
+
+async function searchStocksSmartbox(keyword: string): Promise<StockSearchResult[]> {
+  const q = keyword.trim();
+  if (!q) return [];
+  const url = `${SMARTBOX}/s3/?v=2&q=${encodeURIComponent(q)}&t=all`;
+  try {
+    const res = await fetch(url, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
+    if (!res.ok) return [];
+    return parseSmartboxResponse(await res.text());
+  } catch {
+    return [];
+  }
+}
+
+/** 搜索 A 股 / ETF（JSONP + 腾讯 smartbox 双通道） */
+export async function searchStocks(
+  keyword: string
+): Promise<StockSearchResult[]> {
+  const q = keyword.trim();
+  if (!q) return [];
+
+  // 6 位代码优先走 smartbox（快且稳定）
+  if (/^\d{6}$/.test(normalizeSymbol(q))) {
+    const smart = await searchStocksSmartbox(q);
+    if (smart.length) return smart;
+  }
+
+  const eastmoney = await searchStocksEastmoney(q);
+  if (eastmoney.length) return eastmoney;
+
+  return searchStocksSmartbox(q);
 }
 
 export function formatChangePercent(n: number): string {

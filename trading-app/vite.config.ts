@@ -15,6 +15,12 @@ const emProxy = {
     headers: EM_HEADERS,
     rewrite: (path: string) => path.replace(/^\/api\/em/, ''),
   },
+  '/api/smartbox': {
+    target: 'https://smartbox.gtimg.cn',
+    changeOrigin: true,
+    secure: false,
+    rewrite: (path: string) => path.replace(/^\/api\/smartbox/, ''),
+  },
   '/api/em-search': {
     target: 'https://searchapi.eastmoney.com',
     changeOrigin: true,

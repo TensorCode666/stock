@@ -9,6 +9,7 @@ import { Holdings } from './pages/Holdings';
 import { Journal } from './pages/Journal';
 import { MarketEnv } from './pages/MarketEnv';
 import { PositionCalc } from './pages/PositionCalc';
+import { Practice } from './pages/Practice';
 import { Rules } from './pages/Rules';
 import { StockDetail } from './pages/StockDetail';
 import { Favorites } from './pages/Favorites';
@@ -33,6 +34,7 @@ export default function App() {
             <Route path="holdings" element={<Holdings />} />
             <Route path="journal" element={<Journal />} />
             <Route path="daily" element={<DailyChecklist />} />
+            <Route path="practice" element={<Practice />} />
             <Route path="rules" element={<Rules />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>

@@ -1120,19 +1120,58 @@ code {
   width: 100%;
 }
 
-.chart-pane {
-  width: 100%;
-  border-radius: var(--radius);
-  overflow: hidden;
+.chart-series-legend {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 20;
+  pointer-events: none;
+  padding: 0.5rem 0.65rem;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  line-height: 1.35;
+  background: rgba(20, 26, 36, 0.96);
+  border: 1px solid var(--border);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
+  min-width: 118px;
 }
 
-.chart-legend-hint {
-  margin-left: 0.5rem;
+.chart-series-legend-date {
+  color: var(--muted);
+  font-size: 0.75rem;
+  margin-bottom: 0.35rem;
+}
+
+.chart-series-legend-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.chart-series-legend-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+}
+
+.chart-series-legend-row span:first-child {
+  font-weight: 600;
+}
+
+.chart-series-legend-row span:last-child {
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+.chart-series-legend-close span:first-child {
+  color: var(--muted);
+  font-weight: 500;
 }
 
 .chart-crosshair-hint {
   position: absolute;
-  z-index: 10;
+  z-index: 20;
   pointer-events: none;
   padding: 0.45rem 0.65rem;
   border-radius: 6px;
@@ -1169,6 +1208,126 @@ code {
   color: var(--muted);
 }
 
+.chart-pane {
+  width: 100%;
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.chart-legend-hint {
+  margin-left: 0.5rem;
+}
+
+/* 历史练习 */
+.practice-page .practice-stats {
+  min-width: 140px;
+  text-align: center;
+}
+
+.practice-setup-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.practice-setup-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.9rem;
+}
+
+.practice-setup-grid input[type='date'],
+.practice-setup-grid input[type='number'],
+.practice-setup-grid select {
+  padding: 0.45rem 0.6rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface2);
+  color: var(--text);
+}
+
+.practice-selected-stock {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem;
+  background: var(--surface2);
+  border-radius: 8px;
+}
+
+.practice-context-bar .practice-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  font-size: 0.9rem;
+}
+
+.practice-ma-row {
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border);
+}
+
+.practice-answer-row {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.practice-actions {
+  display: flex;
+  gap: 0.75rem;
+  margin-top: 1.25rem;
+  flex-wrap: wrap;
+}
+
+.practice-result.pass {
+  border-color: var(--green);
+}
+
+.practice-result.fail {
+  border-color: var(--orange);
+}
+
+.practice-feedback {
+  margin: 1rem 0;
+  padding-left: 1.2rem;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.practice-feedback li {
+  margin-bottom: 0.35rem;
+}
+
+.practice-fails {
+  padding: 0.75rem;
+  background: var(--surface2);
+  border-radius: 8px;
+  font-size: 0.9rem;
+  margin-bottom: 0.5rem;
+}
+
+.tag-ok {
+  background: rgba(34, 197, 94, 0.15);
+  color: var(--green);
+}
+
+.tag-bad {
+  background: rgba(251, 146, 60, 0.15);
+  color: var(--orange);
+}
+
+.practice-meta .up {
+  color: var(--red);
+}
+
+.practice-meta .down {
+  color: var(--green);
+}
+
 @media (max-width: 900px) {
   .app-shell {
     flex-direction: column;
@@ -1179,7 +1338,8 @@ code {
   .grid-2,
   .grid-3,
   .check-grid,
-  .rules-grid {
+  .rules-grid,
+  .practice-setup-grid {
     grid-template-columns: 1fr;
   }
 }

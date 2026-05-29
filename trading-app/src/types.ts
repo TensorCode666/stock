@@ -127,6 +127,27 @@ export interface FavoriteStock {
   addedAt: string;
 }
 
+/** 历史练习记录 */
+export interface PracticeAttempt {
+  id: string;
+  symbol: string;
+  name: string;
+  asOfDate: string;
+  mode: TradeMode;
+  envTotal: number;
+  turnoverRatio: number;
+  userInWatchlist: boolean;
+  userStatus: 'watch' | 'ready' | 'reject';
+  systemShouldWatchlist: boolean;
+  systemStatus: 'watch' | 'ready' | 'reject';
+  correct: boolean;
+  totalScore: number;
+  systemReasons: string[];
+  systemFails: string[];
+  notes?: string;
+  createdAt: string;
+}
+
 export interface AppData {
   settings: UserSettings;
   envScores: MarketEnvScore[];
@@ -136,4 +157,5 @@ export interface AppData {
   holdings: Holding[];
   trades: TradeRecord[];
   dailyChecklists: DailyChecklistState[];
+  practiceAttempts: PracticeAttempt[];
 }

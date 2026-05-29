@@ -30,7 +30,20 @@ type CrosshairHint = {
   currentPrice: number;
   changePct: number;
   date?: string;
+  ma5?: number | null;
+  ma20?: number | null;
+  ma30?: number | null;
+  open?: number;
+  high?: number;
+  low?: number;
+  close?: number;
 };
+
+const SERIES_LABEL_OPTS = {
+  title: '',
+  lastValueVisible: false,
+  priceLineVisible: false,
+} as const;
 
 function pctVsCurrent(ref: number, current: number): number {
   if (!ref) return 0;
@@ -121,6 +134,7 @@ export function StockChartPanels({
       borderDownColor: '#34d399',
       wickUpColor: '#f87171',
       wickDownColor: '#34d399',
+      ...SERIES_LABEL_OPTS,
     });
     candles.setData(
       bars.map((b) => ({
@@ -135,17 +149,17 @@ export function StockChartPanels({
     const ma5 = mainChart.addSeries(LineSeries, {
       color: MA_COLORS.ma5,
       lineWidth: 1,
-      title: 'MA5',
+      ...SERIES_LABEL_OPTS,
     });
     const ma20 = mainChart.addSeries(LineSeries, {
       color: MA_COLORS.ma20,
       lineWidth: 1,
-      title: 'MA20',
+      ...SERIES_LABEL_OPTS,
     });
     const ma30 = mainChart.addSeries(LineSeries, {
       color: MA_COLORS.ma30,
       lineWidth: 1,
-      title: 'MA30',
+      ...SERIES_LABEL_OPTS,
     });
     ma5.setData(
       bars
@@ -191,12 +205,12 @@ export function StockChartPanels({
     const difLine = macdChart.addSeries(LineSeries, {
       color: '#3d8bfd',
       lineWidth: 1,
-      title: 'DIF',
+      ...SERIES_LABEL_OPTS,
     });
     const deaLine = macdChart.addSeries(LineSeries, {
       color: '#fb923c',
       lineWidth: 1,
-      title: 'DEA',
+      ...SERIES_LABEL_OPTS,
     });
     difLine.setData(
       bars
@@ -232,9 +246,11 @@ export function StockChartPanels({
       }
 
       let date: string | undefined;
+      let bar: EnrichedBar | undefined;
       if (param.time) {
         const t = String(param.time).slice(0, 10);
-        date = barByTime.get(t)?.date.slice(0, 10) ?? t;
+        bar = barByTime.get(t);
+        date = bar?.date.slice(0, 10) ?? t;
       }
 
       const changePct = pctVsCurrent(yPrice, livePrice);
@@ -245,6 +261,13 @@ export function StockChartPanels({
         currentPrice: livePrice,
         changePct,
         date,
+        ma5: bar?.ma5,
+        ma20: bar?.ma20,
+        ma30: bar?.ma30,
+        open: bar?.open,
+        high: bar?.high,
+        low: bar?.low,
+        close: bar?.close,
       });
     };
 
@@ -297,16 +320,53 @@ export function StockChartPanels({
       <div ref={mainWrapRef} className="chart-pane-wrap">
         <div ref={mainRef} className="chart-pane" />
         {crosshairHint && (
-          <div
-            className={`chart-crosshair-hint ${hintCls}`}
-            style={{
-              left: Math.min(Math.max(crosshairHint.x + 12, 8), 720),
-              top: Math.max(crosshairHint.y - 52, 8),
-            }}
-          >
+          <>
             {crosshairHint.date && (
-              <span className="hint-date">{crosshairHint.date}</span>
+              <div className="chart-series-legend">
+                <div className="chart-series-legend-date">
+                  {crosshairHint.date}
+                </div>
+                <div className="chart-series-legend-rows">
+                  {crosshairHint.ma5 != null && (
+                    <div className="chart-series-legend-row">
+                      <span style={{ color: MA_COLORS.ma5 }}>MA5</span>
+                      <span>{crosshairHint.ma5.toFixed(2)}</span>
+                    </div>
+                  )}
+                  {crosshairHint.ma20 != null && (
+                    <div className="chart-series-legend-row">
+                      <span style={{ color: MA_COLORS.ma20 }}>MA20</span>
+                      <span>{crosshairHint.ma20.toFixed(2)}</span>
+                    </div>
+                  )}
+                  {crosshairHint.ma30 != null && (
+                    <div className="chart-series-legend-row">
+                      <span style={{ color: MA_COLORS.ma30 }}>MA30</span>
+                      <span>{crosshairHint.ma30.toFixed(2)}</span>
+                    </div>
+                  )}
+                  {crosshairHint.close != null && (
+                    <div className="chart-series-legend-row chart-series-legend-close">
+                      <span>收盘</span>
+                      <span>{crosshairHint.close.toFixed(2)}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
             )}
+            <div
+              className={`chart-crosshair-hint ${hintCls}`}
+              style={{
+                left: Math.min(
+                  Math.max(crosshairHint.x + 14, 8),
+                  (mainWrapRef.current?.clientWidth ?? 720) - 168
+                ),
+                top: Math.min(
+                  Math.max(crosshairHint.y + 14, 8),
+                  280
+                ),
+              }}
+            >
             <span className="hint-price">
               光标 {crosshairHint.refPrice.toFixed(2)}
             </span>
@@ -317,6 +377,7 @@ export function StockChartPanels({
               较光标 {formatChangePercent(crosshairHint.changePct)}
             </strong>
           </div>
+          </>
         )}
       </div>
       <p className="chart-label">成交量</p>

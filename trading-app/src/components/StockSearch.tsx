@@ -3,12 +3,19 @@ import { searchStocks, type StockSearchResult } from '../lib/market-api';
 
 export function StockSearch({
   onSelect,
+  query: controlledQuery,
+  onQueryChange,
   placeholder = '输入代码或名称搜索…',
 }: {
   onSelect: (item: StockSearchResult) => void;
+  /** 受控搜索词（练习页等需在提交时读取输入） */
+  query?: string;
+  onQueryChange?: (q: string) => void;
   placeholder?: string;
 }) {
-  const [q, setQ] = useState('');
+  const [internalQuery, setInternalQuery] = useState('');
+  const q = controlledQuery ?? internalQuery;
+  const setQ = onQueryChange ?? setInternalQuery;
   const [results, setResults] = useState<StockSearchResult[]>([]);
   const [loading, setLoading] = useState(false);
 

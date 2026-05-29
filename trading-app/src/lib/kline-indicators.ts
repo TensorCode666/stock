@@ -108,14 +108,17 @@ function parseKlineRows(rows: string[][]): KlineBar[] {
 /** 腾讯前复权 K 线（日 / 周 / 月） */
 export async function fetchKlines(
   symbol: string,
-  period: KlinePeriod = 'day'
+  period: KlinePeriod = 'day',
+  limit?: number
 ): Promise<KlineBar[] | null> {
-  const marketSymbol = symbolToTencentMarket(symbol);
+  const code = normalizeSymbol(symbol);
+  const marketSymbol = symbolToTencentMarket(code);
   if (!marketSymbol) return null;
   const cfg = PERIOD_CONFIG[period];
-  const url = `${QQ}/appstock/app/fqkline/get?param=${marketSymbol},${cfg.apiKey},,,${cfg.limit},qfq`;
+  const barLimit = limit ?? cfg.limit;
+  const url = `${QQ}/appstock/app/fqkline/get?param=${marketSymbol},${cfg.apiKey},,,${barLimit},qfq`;
   try {
-    const res = await fetch(url);
+    const res = await fetch(url, { signal: AbortSignal.timeout(15_000) });
     if (!res.ok) return null;
     const json = (await res.json()) as {
       data?: Record<string, Record<string, string[][] | unknown>>;

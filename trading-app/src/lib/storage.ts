@@ -2,6 +2,10 @@ import type { AppData } from '../types';
 
 const STORAGE_KEY = 'stock-trading-system-v1';
 
+function asArray<T>(value: unknown): T[] {
+  return Array.isArray(value) ? value : [];
+}
+
 export const defaultAppData: AppData = {
   settings: {
     totalCapital: 100000,
@@ -14,6 +18,7 @@ export const defaultAppData: AppData = {
   holdings: [],
   trades: [],
   dailyChecklists: [],
+  practiceAttempts: [],
 };
 
 export function loadData(): AppData {
@@ -21,12 +26,22 @@ export function loadData(): AppData {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return { ...defaultAppData };
     const parsed = JSON.parse(raw) as Partial<AppData>;
-    const data = {
+    const data: AppData = {
       ...defaultAppData,
       ...parsed,
-      favorites: parsed.favorites ?? [],
+      settings: { ...defaultAppData.settings, ...(parsed.settings ?? {}) },
+      envScores: asArray(parsed.envScores),
+      watchlist: asArray(parsed.watchlist),
+      favorites: asArray(parsed.favorites),
+      tradePlans: asArray(parsed.tradePlans),
+      holdings: asArray(parsed.holdings),
+      trades: asArray(parsed.trades),
+      dailyChecklists: asArray(parsed.dailyChecklists),
+      practiceAttempts: asArray(parsed.practiceAttempts),
     };
-    data.watchlist = data.watchlist.filter((w) => w.status !== 'removed');
+    data.watchlist = data.watchlist.filter(
+      (w) => w && typeof w === 'object' && w.status !== 'removed'
+    );
     return data;
   } catch {
     return { ...defaultAppData };

@@ -11,6 +11,7 @@ const navItems = [
   { to: '/position', label: '仓位计算' },
   { to: '/holdings', label: '持仓' },
   { to: '/journal', label: '交易复盘' },
+  { to: '/practice', label: '历史练习' },
   { to: '/daily', label: '每日清单' },
   { to: '/rules', label: '规则库' },
 ];

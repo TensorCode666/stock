@@ -129,13 +129,26 @@ function volumeShrinkOnPullback(bars: KlineBar[]): boolean {
   return downVol / downN <= (upVol / upN) * 1.2;
 }
 
-/** 趋势股规则（对齐 02_选股体系 趋势股观察池） */
-export function evaluateTrendStock(
+export interface TrendEvalResult {
+  passed: boolean;
+  fails: string[];
+  reasons: string[];
+  price: number;
+  changePercent: number;
+  ma5: number;
+  ma10: number;
+  ma20: number;
+  scores: WatchlistItem['scores'];
+  status: WatchlistItem['status'];
+}
+
+/** 趋势股规则（对齐 02_选股体系 趋势股观察池），含通过/失败明细 */
+export function evaluateTrendStockDetailed(
   bars: KlineBar[],
   changePercent: number,
   turnoverRatio: number,
   envScorePart: number
-): Omit<ScreenCandidate, 'symbol' | 'name' | 'mode'> | null {
+): TrendEvalResult | null {
   if (bars.length < 22) return null;
   const closes = bars.map((b) => b.close);
   const price = closes[closes.length - 1]!;
@@ -167,11 +180,9 @@ export function evaluateTrendStock(
   if (!volumeShrinkOnPullback(bars)) fails.push('回调未明显缩量');
   else reasons.push('回调缩量特征尚可');
 
-  if (fails.length > 0) return null;
-
   const nearMa20 = price <= ma20 * 1.03 && price >= ma20 * 0.98;
   const status: WatchlistItem['status'] = nearMa20 ? 'ready' : 'watch';
-  if (nearMa20) reasons.push('接近20日线支撑，可关注买点');
+  if (nearMa20 && fails.length === 0) reasons.push('接近20日线支撑，可关注买点');
 
   const scores: WatchlistItem['scores'] = {
     marketEnv: envScorePart,
@@ -183,27 +194,71 @@ export function evaluateTrendStock(
   };
 
   return {
+    passed: fails.length === 0,
+    fails,
+    reasons,
     price,
     changePercent,
     ma5,
     ma10,
     ma20,
-    reasons,
     scores,
     status,
+  };
+}
+
+/** 趋势股规则（对齐 02_选股体系 趋势股观察池） */
+export function evaluateTrendStock(
+  bars: KlineBar[],
+  changePercent: number,
+  turnoverRatio: number,
+  envScorePart: number
+): Omit<ScreenCandidate, 'symbol' | 'name' | 'mode'> | null {
+  const ev = evaluateTrendStockDetailed(
+    bars,
+    changePercent,
+    turnoverRatio,
+    envScorePart
+  );
+  if (!ev?.passed) return null;
+  return {
+    price: ev.price,
+    changePercent: ev.changePercent,
+    ma5: ev.ma5,
+    ma10: ev.ma10,
+    ma20: ev.ma20,
+    reasons: ev.reasons,
+    scores: ev.scores,
+    status: ev.status,
     totalScore: 0,
   };
 }
 
+export interface EmotionEvalResult {
+  passed: boolean;
+  fails: string[];
+  reasons: string[];
+  scores: WatchlistItem['scores'];
+}
+
 /** 情绪短线：强势、高换手（仅在情绪环境启用） */
-export function evaluateEmotionStock(
+export function evaluateEmotionStockDetailed(
   changePercent: number,
   turnoverRatio: number,
   envScorePart: number
-): WatchlistItem['scores'] | null {
-  if (changePercent < 5 || turnoverRatio < 4) return null;
-  if (changePercent > 10.5) return null;
-  return {
+): EmotionEvalResult {
+  const fails: string[] = [];
+  const reasons: string[] = [];
+
+  if (changePercent < 5) fails.push('涨幅不足 5%');
+  else reasons.push(`当日涨幅 ${changePercent.toFixed(2)}%`);
+
+  if (turnoverRatio < 4) fails.push('换手率低于 4%');
+  else reasons.push(`换手率 ${turnoverRatio.toFixed(2)}%`);
+
+  if (changePercent > 10.5) fails.push('涨幅过大，追高风险高');
+
+  const scores: WatchlistItem['scores'] = {
     marketEnv: envScorePart,
     sector: 3,
     trend: 2,
@@ -211,6 +266,27 @@ export function evaluateEmotionStock(
     buyPointClarity: 1,
     riskReward: 1,
   };
+
+  return {
+    passed: fails.length === 0,
+    fails,
+    reasons,
+    scores,
+  };
+}
+
+export function evaluateEmotionStock(
+  changePercent: number,
+  turnoverRatio: number,
+  envScorePart: number
+): WatchlistItem['scores'] | null {
+  const ev = evaluateEmotionStockDetailed(
+    changePercent,
+    turnoverRatio,
+    envScorePart
+  );
+  if (!ev.passed) return null;
+  return ev.scores;
 }
 
 const ETF_CODES = [
