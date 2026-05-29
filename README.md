@@ -23,7 +23,9 @@
 - 按规则**扫描观察池**，支持**一键买入**写入持仓
 - **自选股**独立跟踪，记录加入时价格
 - 填写**买入计划**与检查表
-- 查看个股 **K 线、均线、成交量、MACD**；十字光标**对比现价涨跌幅**
+- 查看个股 **K 线、均线、成交量、MACD**；十字光标**对比现价涨跌幅**（均线数值左上角浮层显示，不被 K 线遮挡）
+- **历史练习**：任选股票与交易日，根据截止当日的 K 线做观察池判断，提交后与规则引擎自动比对
+- **持仓规则建议**：对每只持仓给出加仓 / 减仓 / 持有 / 清仓参考（对齐卖出规则，非自动交易）
 - 记录持仓与复盘
 
 **它不是荐股软件，也不会替你下单。**  
@@ -161,9 +163,25 @@
 
 ---
 
-### 持仓 · 卖出规则
+### 历史练习
 
-记录持仓，对照系统里的止损、止盈、时间止损信号；实时查看浮动盈亏（可从观察池一键买入写入）。
+任选股票与历史交易日，K 线**只显示截止所选日期**（不泄露之后走势）。根据当日走势判断「是否纳入观察池」，提交后与系统规则引擎比对对错，并记录练习历史与准确率。
+
+<p align="center">
+  <img src="./assets/practice.png" width="920" alt="历史练习" />
+</p>
+
+支持按名称或代码搜索、假设环境总分、可选换手率；练习日期可选约 3 年内任意交易日。
+
+---
+
+### 持仓 · 规则建议
+
+记录持仓并实时查看浮动盈亏（可从观察池一键买入写入）。系统根据**止损/目标、均线结构、时间止损、环境评分**等规则，为每只持仓给出 **加仓 / 减仓 / 持有 / 清仓** 建议及理由（参考用，不会自动下单）。
+
+<p align="center">
+  <img src="./assets/holdings-advice.png" width="920" alt="持仓规则建议" />
+</p>
 
 ---
 
@@ -189,9 +207,16 @@
 ```
 stock/
 ├── assets/             # README 配图（提交到 Git 后 GitHub 会直接显示）
+│   ├── dashboard.png
+│   ├── market-env-ai.png
+│   ├── watchlist.png
+│   ├── favorites.png
+│   ├── stock-detail.png
+│   ├── practice.png          # 历史练习
+│   └── holdings-advice.png   # 持仓规则建议
 ├── trading-system/     # 交易规则文档（方法论，可单独阅读）
 ├── trading-app/        # 本地 Web 工具（交互界面）
-└── docs/screenshots/   # 配图备份
+└── docs/screenshots/   # 配图备份（与 assets/ 同步）
 ```
 
 - 想**学方法**：从 [`trading-system/README.md`](trading-system/README.md) 读起。  
@@ -248,9 +273,12 @@ npm run preview -- --port 4173
 ```bash
 cd trading-app
 npm run dev -- --port 5174
-# 另开终端（默认连接 5174，可用 APP_URL 覆盖）
-node scripts/capture-readme-screenshots.mjs
+# 另开终端
+npm run capture-screenshots
+# 或指定地址：APP_URL=http://localhost:5173 node scripts/capture-readme-screenshots.mjs
 ```
+
+截图会同时写入 `assets/` 与 `docs/screenshots/`。当前包含：总览、市场环境、观察池、自选股、个股详情、**历史练习**、**持仓建议**。
 
 ---
 

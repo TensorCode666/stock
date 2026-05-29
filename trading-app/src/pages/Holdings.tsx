@@ -1,11 +1,24 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { HoldingPnl, QuoteCell } from '../components/QuoteCell';
 import { StockSearch } from '../components/StockSearch';
 import { useApp } from '../context/AppContext';
 import { useMarketData } from '../context/MarketDataContext';
-import { TRADE_MODE_LABELS } from '../lib/calculations';
-import { newId } from '../lib/storage';
+import { envScoreTotal, TRADE_MODE_LABELS } from '../lib/calculations';
+import {
+  ADVICE_TAG_CLASS,
+  evaluateHoldingAdvice,
+  type HoldingAdvice,
+} from '../lib/holding-advice';
+import { fetchKlines, type KlineBar } from '../lib/kline-indicators';
+import { newId, todayStr } from '../lib/storage';
+import { normalizeSymbol } from '../lib/symbols';
 import type { Holding, TradeMode } from '../types';
+
+const URGENCY_LABELS = {
+  low: '低',
+  medium: '中',
+  high: '高',
+} as const;
 
 function emptyHolding(): Holding {
   return {
@@ -23,10 +36,102 @@ function emptyHolding(): Holding {
   };
 }
 
+function AdviceCard({
+  holding,
+  advice,
+  loading,
+}: {
+  holding: Holding;
+  advice: HoldingAdvice;
+  loading: boolean;
+}) {
+  return (
+    <div className={`advice-card advice-${advice.action}`}>
+      <div className="advice-card-head">
+        <div>
+          <strong>
+            {holding.symbol} {holding.name}
+          </strong>
+          <span className="small block">
+            {TRADE_MODE_LABELS[holding.mode]}
+          </span>
+        </div>
+        <span className={`tag ${ADVICE_TAG_CLASS[advice.action]}`}>
+          {advice.label}
+        </span>
+      </div>
+      {loading ? (
+        <p className="small muted">正在加载 K 线…</p>
+      ) : (
+        <>
+          <p className="small advice-meta">
+            置信度 {advice.confidence}% · 紧迫度{' '}
+            {URGENCY_LABELS[advice.urgency]}
+          </p>
+          <ul className="advice-reasons">
+            {advice.reasons.map((r) => (
+              <li key={r}>{r}</li>
+            ))}
+          </ul>
+        </>
+      )}
+    </div>
+  );
+}
+
 export function Holdings() {
   const { data, setData } = useApp();
   const { getQuote, refresh } = useMarketData();
   const [form, setForm] = useState<Holding | null>(null);
+  const [klinesMap, setKlinesMap] = useState<Map<string, KlineBar[]>>(
+    new Map()
+  );
+  const [klinesLoading, setKlinesLoading] = useState(false);
+
+  const todayEnv = data.envScores.find((e) => e.date === todayStr());
+
+  useEffect(() => {
+    const symbols = [
+      ...new Set(data.holdings.map((h) => normalizeSymbol(h.symbol))),
+    ].filter(Boolean);
+    if (symbols.length === 0) {
+      setKlinesMap(new Map());
+      return;
+    }
+    let cancelled = false;
+    setKlinesLoading(true);
+    void (async () => {
+      const entries = await Promise.all(
+        symbols.map(async (sym) => {
+          const bars = await fetchKlines(sym, 'day', 40);
+          return [sym, bars ?? []] as const;
+        })
+      );
+      if (cancelled) return;
+      setKlinesMap(new Map(entries));
+      setKlinesLoading(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [data.holdings]);
+
+  const adviceById = useMemo(() => {
+    const map = new Map<string, HoldingAdvice>();
+    for (const h of data.holdings) {
+      const sym = normalizeSymbol(h.symbol);
+      map.set(
+        h.id,
+        evaluateHoldingAdvice({
+          holding: h,
+          quote: getQuote(sym),
+          bars: klinesMap.get(sym),
+          envScore: todayEnv ?? null,
+        })
+      );
+    }
+    return map;
+  }, [data.holdings, getQuote, klinesMap, todayEnv]);
 
   const save = () => {
     if (!form?.symbol.trim()) return;
@@ -220,6 +325,32 @@ export function Holdings() {
         </div>
       </div>
 
+      {data.holdings.length > 0 && (
+        <div className="card section">
+          <h3>
+            规则建议
+            <span className="badge">参考 · 非自动交易</span>
+          </h3>
+          <p className="small muted">
+            基于止损/目标、均线结构、时间止损与环境评分，对齐 trading-system
+            卖出规则。
+            {todayEnv
+              ? ` 今日环境 ${envScoreTotal(todayEnv)}/10。`
+              : ' 今日尚未录入环境评分。'}
+          </p>
+          <div className="advice-grid">
+            {data.holdings.map((h) => (
+              <AdviceCard
+                key={h.id}
+                holding={h}
+                advice={adviceById.get(h.id)!}
+                loading={klinesLoading && !klinesMap.has(normalizeSymbol(h.symbol))}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className="card section">
         {data.holdings.length === 0 ? (
           <p className="muted">暂无持仓记录</p>
@@ -229,6 +360,7 @@ export function Holdings() {
               <tr>
                 <th>标的</th>
                 <th>模式</th>
+                <th>建议</th>
                 <th>买入</th>
                 <th>股数</th>
                 <th>现价</th>
@@ -240,47 +372,58 @@ export function Holdings() {
               </tr>
             </thead>
             <tbody>
-              {data.holdings.map((h) => (
-                <tr key={h.id}>
-                  <td>
-                    {h.symbol} {h.name}
-                  </td>
-                  <td>{TRADE_MODE_LABELS[h.mode]}</td>
-                  <td>
-                    {h.buyDate} @ {h.buyPrice}
-                  </td>
-                  <td>{h.shares}</td>
-                  <td>
-                    <QuoteCell quote={getQuote(h.symbol)} />
-                  </td>
-                  <td>
-                    <HoldingPnl
-                      quote={getQuote(h.symbol)}
-                      buyPrice={h.buyPrice}
-                      shares={h.shares}
-                    />
-                  </td>
-                  <td>{h.stopLoss}</td>
-                  <td>{h.targetPrice}</td>
-                  <td>¥{(h.buyPrice * h.shares).toFixed(0)}</td>
-                  <td className="actions">
-                    <button
-                      type="button"
-                      className="btn sm"
-                      onClick={() => setForm(h)}
-                    >
-                      编辑
-                    </button>
-                    <button
-                      type="button"
-                      className="btn sm danger"
-                      onClick={() => remove(h.id)}
-                    >
-                      删除
-                    </button>
-                  </td>
-                </tr>
-              ))}
+              {data.holdings.map((h) => {
+                const advice = adviceById.get(h.id)!;
+                return (
+                  <tr key={h.id}>
+                    <td>
+                      {h.symbol} {h.name}
+                    </td>
+                    <td>{TRADE_MODE_LABELS[h.mode]}</td>
+                    <td>
+                      <span
+                        className={`tag ${ADVICE_TAG_CLASS[advice.action]}`}
+                        title={advice.reasons.join('；')}
+                      >
+                        {advice.label}
+                      </span>
+                    </td>
+                    <td>
+                      {h.buyDate} @ {h.buyPrice}
+                    </td>
+                    <td>{h.shares}</td>
+                    <td>
+                      <QuoteCell quote={getQuote(h.symbol)} />
+                    </td>
+                    <td>
+                      <HoldingPnl
+                        quote={getQuote(h.symbol)}
+                        buyPrice={h.buyPrice}
+                        shares={h.shares}
+                      />
+                    </td>
+                    <td>{h.stopLoss}</td>
+                    <td>{h.targetPrice}</td>
+                    <td>¥{(h.buyPrice * h.shares).toFixed(0)}</td>
+                    <td className="actions">
+                      <button
+                        type="button"
+                        className="btn sm"
+                        onClick={() => setForm(h)}
+                      >
+                        编辑
+                      </button>
+                      <button
+                        type="button"
+                        className="btn sm danger"
+                        onClick={() => remove(h.id)}
+                      >
+                        删除
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         )}

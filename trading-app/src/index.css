@@ -1320,6 +1320,55 @@ code {
   color: var(--orange);
 }
 
+.advice-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+}
+
+.advice-card {
+  padding: 0.85rem 1rem;
+  background: var(--surface2);
+  border-radius: 10px;
+  border: 1px solid var(--border);
+}
+
+.advice-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.5rem;
+  margin-bottom: 0.35rem;
+}
+
+.advice-meta {
+  margin: 0.25rem 0 0.5rem;
+}
+
+.advice-reasons {
+  margin: 0;
+  padding-left: 1.1rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.advice-reasons li + li {
+  margin-top: 0.25rem;
+}
+
+.advice-clear {
+  border-color: rgba(239, 68, 68, 0.35);
+}
+
+.advice-reduce {
+  border-color: rgba(251, 146, 60, 0.35);
+}
+
+.advice-add {
+  border-color: rgba(34, 197, 94, 0.35);
+}
+
 .practice-meta .up {
   color: var(--red);
 }

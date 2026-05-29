@@ -1,6 +1,7 @@
 /**
  * 抓取 README 配图（需先 npm run dev）
- * 用法：node scripts/capture-readme-screenshots.mjs
+ * 用法：npm run capture-screenshots
+ * 或：APP_URL=http://localhost:5173 node scripts/capture-readme-screenshots.mjs
  */
 import { mkdir, copyFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -13,9 +14,20 @@ const ASSETS = path.join(ROOT, 'assets');
 const DOCS = path.join(ROOT, 'docs', 'screenshots');
 const BASE = process.env.APP_URL || 'http://localhost:5174';
 
+const today = new Date().toISOString().slice(0, 10);
+
 const DEMO_DATA = {
   settings: { totalCapital: 100000, maxLossPerTradePercent: 1.5 },
-  envScores: [],
+  envScores: [
+    {
+      date: today,
+      indexTrend: 2,
+      mainSector: 1,
+      profitEffect: 2,
+      emotionCycle: 1,
+      volume: 2,
+    },
+  ],
   favorites: [
     {
       id: 'fav-510300',
@@ -50,9 +62,56 @@ const DEMO_DATA = {
     },
   ],
   tradePlans: [],
-  holdings: [],
+  holdings: [
+    {
+      id: 'h-300394',
+      symbol: '300394',
+      name: '天孚通信',
+      mode: 'trend',
+      buyDate: '2026-04-15',
+      buyPrice: 95,
+      shares: 200,
+      stopLoss: 88,
+      targetPrice: 115,
+      sellConditions: '跌破20日线；放量破位；3日不创新高',
+      notes: '',
+    },
+    {
+      id: 'h-510300',
+      symbol: '510300',
+      name: '沪深300ETF',
+      mode: 'etf',
+      buyDate: '2026-03-20',
+      buyPrice: 3.95,
+      shares: 1000,
+      stopLoss: 3.75,
+      targetPrice: 4.35,
+      sellConditions: '跌破20日线',
+      notes: '',
+    },
+  ],
   trades: [],
   dailyChecklists: [],
+  practiceAttempts: [
+    {
+      id: 'p-demo-1',
+      symbol: '300394',
+      name: '天孚通信',
+      asOfDate: '2025-05-22',
+      mode: 'trend',
+      envTotal: 6,
+      turnoverRatio: 2.5,
+      userInWatchlist: true,
+      userStatus: 'watch',
+      systemShouldWatchlist: true,
+      systemStatus: 'watch',
+      correct: true,
+      totalScore: 14,
+      systemReasons: ['5/10/20日均线多头', '股价在20日线附近或上方'],
+      systemFails: [],
+      createdAt: new Date().toISOString(),
+    },
+  ],
 };
 
 async function saveBoth(page, name) {
@@ -71,6 +130,42 @@ async function navBySidebar(page, label, heading) {
   await page.waitForTimeout(1500);
   const h = await page.locator('.page h2').first().textContent();
   console.log(`nav ${label} → ${h?.trim()}`);
+}
+
+async function capturePractice(page) {
+  await navBySidebar(page, '历史练习', '历史练习');
+  await page.getByPlaceholder('输入名称或代码').fill('300394');
+  await page.getByRole('button', { name: '开始练习' }).click();
+  try {
+    await page.locator('.practice-context-bar').waitFor({
+      state: 'visible',
+      timeout: 45000,
+    });
+    await page.waitForTimeout(3000);
+    const chart = page.locator('.chart-pane').first();
+    const box = await chart.boundingBox();
+    if (box) {
+      await page.mouse.move(box.x + box.width * 0.5, box.y + box.height * 0.5);
+      await page.waitForTimeout(800);
+    }
+  } catch {
+    console.warn('practice K-line load timeout, capture setup page');
+    await navBySidebar(page, '历史练习', '历史练习');
+    await page.getByPlaceholder('输入名称或代码').fill('天孚通信');
+    await page.waitForTimeout(500);
+  }
+  await saveBoth(page, 'practice.png');
+}
+
+async function captureHoldingsAdvice(page) {
+  await navBySidebar(page, '持仓', '持仓管理');
+  await page.locator('h3', { hasText: '规则建议' }).waitFor({
+    state: 'visible',
+    timeout: 15000,
+  });
+  // 等待 K 线加载后建议理由更完整
+  await page.waitForTimeout(8000);
+  await saveBoth(page, 'holdings-advice.png');
 }
 
 async function main() {
@@ -138,6 +233,9 @@ async function main() {
     console.warn('chart not visible, capture detail without crosshair');
   }
   await saveBoth(page, 'stock-detail.png');
+
+  await capturePractice(page);
+  await captureHoldingsAdvice(page);
 
   await browser.close();
   console.log('Done.');

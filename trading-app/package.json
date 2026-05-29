@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "tsc -b && vite build && node scripts/copy-spa-404.mjs",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "capture-screenshots": "node scripts/capture-readme-screenshots.mjs"
   },
   "dependencies": {
     "lightweight-charts": "^5.2.0",
