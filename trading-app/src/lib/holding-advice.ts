@@ -1,7 +1,12 @@
-import { envScoreLabel, envScoreTotal } from './calculations';
+import { envScoreLabel, envScoreTotal, envToScorePart } from './calculations';
+import {
+  estimateTurnoverRatio,
+  ma,
+  type KlineBar,
+} from './kline-indicators';
 import {
   evaluateTrendStockDetailed,
-  type KlineBar,
+  type TrendFailTag,
 } from './stock-screener';
 import type { Holding, MarketEnvScore } from '../types';
 import type { StockQuote } from './market-api';
@@ -31,6 +36,26 @@ export const ADVICE_TAG_CLASS: Record<HoldingAdviceAction, string> = {
   clear: 'tag-bad',
 };
 
+export const DEFAULT_HOLDING_ADVICE: HoldingAdvice = {
+  action: 'hold',
+  label: '持有',
+  reasons: ['数据加载中…'],
+  confidence: 0,
+  urgency: 'low',
+};
+
+const TREND_FAIL_ACTIONS: Record<
+  TrendFailTag,
+  { action: HoldingAdviceAction; urgency: AdviceUrgency; weight: number }
+> = {
+  ma20: { action: 'clear', urgency: 'medium', weight: 4 },
+  ma_align: { action: 'clear', urgency: 'medium', weight: 4 },
+  chase: { action: 'reduce', urgency: 'medium', weight: 3 },
+  volatility: { action: 'reduce', urgency: 'medium', weight: 3 },
+  turnover: { action: 'reduce', urgency: 'low', weight: 2 },
+  volume_shrink: { action: 'reduce', urgency: 'low', weight: 2 },
+};
+
 interface AdviceSignal {
   action: HoldingAdviceAction;
   reason: string;
@@ -43,12 +68,6 @@ export interface HoldingAdviceInput {
   quote?: StockQuote;
   bars?: KlineBar[] | null;
   envScore?: MarketEnvScore | null;
-}
-
-function ma(closes: number[], n: number): number {
-  if (closes.length < n) return 0;
-  const slice = closes.slice(-n);
-  return slice.reduce((a, b) => a + b, 0) / n;
 }
 
 function tradingDaysSinceBuy(buyDate: string, bars: KlineBar[]): number {
@@ -195,14 +214,11 @@ export function evaluateHoldingAdvice(input: HoldingAdviceInput): HoldingAdvice 
   }
 
   // —— K 线 / 均线结构 ——
-  let ma5 = 0;
-  let ma10 = 0;
-  let ma20 = 0;
   if (bars && bars.length >= 20) {
     const closes = bars.map((b) => b.close);
-    ma5 = ma(closes, 5);
-    ma10 = ma(closes, 10);
-    ma20 = ma(closes, 20);
+    const ma5 = ma(closes, 5);
+    const ma10 = ma(closes, 10);
+    const ma20 = ma(closes, 20);
 
     if (ma20 > 0 && price < ma20 * 0.97) {
       signals.push({
@@ -290,19 +306,26 @@ export function evaluateHoldingAdvice(input: HoldingAdviceInput): HoldingAdvice 
 
   // 复用选股规则做趋势/ETF 结构参考
   if (bars && bars.length >= 22 && (holding.mode === 'trend' || holding.mode === 'etf')) {
+    const turnoverRatio =
+      bars.length >= 5 ? estimateTurnoverRatio(bars) : 2;
     const trendEv = evaluateTrendStockDetailed(
       bars,
       changePercent,
-      2,
-      envTotal !== null ? Math.min(4, Math.ceil(envTotal / 2.5)) : 2
+      turnoverRatio,
+      envTotal !== null ? envToScorePart(envTotal) : 2
     );
     if (trendEv) {
-      for (const f of trendEv.fails) {
-        if (f.includes('20日线') || f.includes('均线')) {
-          signals.push({ action: 'clear', reason: f, weight: 4, urgency: 'medium' });
-        } else if (f.includes('涨幅') || f.includes('跌幅')) {
-          signals.push({ action: 'reduce', reason: f, weight: 3, urgency: 'medium' });
-        }
+      for (let i = 0; i < trendEv.fails.length; i++) {
+        const tag = trendEv.failTags[i];
+        const reason = trendEv.fails[i]!;
+        if (!tag) continue;
+        const rule = TREND_FAIL_ACTIONS[tag];
+        signals.push({
+          action: rule.action,
+          reason,
+          weight: rule.weight,
+          urgency: rule.urgency,
+        });
       }
       if (trendEv.passed && trendEv.status === 'ready') {
         signals.push({

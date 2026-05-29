@@ -121,7 +121,9 @@ async function fetchTencentQuotes(
   for (let i = 0; i < ids.length; i += chunkSize) {
     const chunk = ids.slice(i, i + chunkSize);
     try {
-      const res = await fetch(`${QT}/q=${chunk.join(',')}`);
+      const res = await fetch(`${QT}/q=${chunk.join(',')}`, {
+        signal: AbortSignal.timeout(12_000),
+      });
       if (!res.ok) continue;
       const text = await res.text();
       for (const line of text.split(';')) {

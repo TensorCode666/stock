@@ -17,7 +17,7 @@ import {
   type MarketBreadth,
   type StockQuote,
 } from '../lib/market-api';
-import { normalizeSymbol } from '../lib/symbols';
+import { normalizeSymbol, symbolsKey } from '../lib/symbols';
 
 type RefreshOptions = { silent?: boolean };
 
@@ -48,7 +48,7 @@ export function MarketDataProvider({ children }: { children: ReactNode }) {
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const initialDone = useRef(false);
 
-  const symbolsToFetch = useMemo(() => {
+  const symbolsKeyValue = useMemo(() => {
     const set = new Set<string>();
     for (const w of data.watchlist) {
       if (w.status !== 'removed') set.add(normalizeSymbol(w.symbol));
@@ -59,11 +59,14 @@ export function MarketDataProvider({ children }: { children: ReactNode }) {
     for (const f of data.favorites) {
       set.add(normalizeSymbol(f.symbol));
     }
-    return [...set].filter(Boolean);
+    return symbolsKey([...set]);
   }, [data.watchlist, data.holdings, data.favorites]);
 
   const refresh = useCallback(
     async (options?: RefreshOptions) => {
+      const symbols = symbolsKeyValue
+        ? symbolsKeyValue.split(',').filter(Boolean)
+        : [];
       const silent = options?.silent ?? initialDone.current;
       if (!silent) setLoading(true);
       setRefreshing(true);
@@ -75,7 +78,7 @@ export function MarketDataProvider({ children }: { children: ReactNode }) {
           return [] as Awaited<ReturnType<typeof fetchIndices>>;
         }),
         fetchMarketBreadth().catch(() => null),
-        fetchStockQuotes(symbolsToFetch).catch((e) => {
+        fetchStockQuotes(symbols).catch((e) => {
           errors.push(e instanceof Error ? e.message : '个股行情失败');
           return new Map<string, StockQuote>();
         }),
@@ -93,7 +96,7 @@ export function MarketDataProvider({ children }: { children: ReactNode }) {
       setLoading(false);
       setRefreshing(false);
     },
-    [symbolsToFetch]
+    [symbolsKeyValue]
   );
 
   useEffect(() => {

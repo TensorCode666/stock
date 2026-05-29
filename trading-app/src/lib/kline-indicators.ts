@@ -55,6 +55,39 @@ function sma(values: number[], period: number): (number | null)[] {
   });
 }
 
+/** 最近 n 根收盘价的简单移动平均 */
+export function ma(closes: number[], n: number): number {
+  if (closes.length < n) return 0;
+  const slice = closes.slice(-n);
+  return slice.reduce((a, b) => a + b, 0) / n;
+}
+
+/** 用成交量相对近期均量估算换手率（无真实换手时的近似） */
+export function estimateTurnoverRatio(bars: KlineBar[]): number {
+  if (bars.length < 5) return 1;
+  const recent = bars.slice(-20);
+  const last = recent[recent.length - 1]!;
+  const avgVol =
+    recent.reduce((s, b) => s + b.volume, 0) / recent.length || 1;
+  const ratio = last.volume / avgVol;
+  return Math.min(15, Math.max(0.3, ratio * 1.5));
+}
+
+export function toPlainBars(
+  bars: Array<
+    Pick<KlineBar, 'date' | 'open' | 'high' | 'low' | 'close' | 'volume'>
+  >
+): KlineBar[] {
+  return bars.map(({ date, open, high, low, close, volume }) => ({
+    date,
+    open,
+    high,
+    low,
+    close,
+    volume,
+  }));
+}
+
 function emaSeries(values: number[], period: number): number[] {
   const k = 2 / (period + 1);
   const out: number[] = [];

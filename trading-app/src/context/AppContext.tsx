@@ -24,6 +24,11 @@ const SAVE_DEBOUNCE_MS = 400;
 export function AppProvider({ children }: { children: ReactNode }) {
   const [data, setData] = useState<AppData>(() => loadData());
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const dataRef = useRef(data);
+
+  useEffect(() => {
+    dataRef.current = data;
+  }, [data]);
 
   useEffect(() => {
     if (saveTimer.current) clearTimeout(saveTimer.current);
@@ -34,6 +39,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (saveTimer.current) clearTimeout(saveTimer.current);
     };
   }, [data]);
+
+  useEffect(() => {
+    const flush = () => saveData(dataRef.current);
+    window.addEventListener('beforeunload', flush);
+    const onHidden = () => {
+      if (document.visibilityState === 'hidden') flush();
+    };
+    document.addEventListener('visibilitychange', onHidden);
+    return () => {
+      window.removeEventListener('beforeunload', flush);
+      document.removeEventListener('visibilitychange', onHidden);
+    };
+  }, []);
 
   const update = useCallback((patch: Partial<AppData>) => {
     setData((prev) => ({ ...prev, ...patch }));

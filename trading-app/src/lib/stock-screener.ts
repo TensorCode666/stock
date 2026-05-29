@@ -1,21 +1,8 @@
-import { stockScoreTotal } from './calculations';
+import { envToScorePart, stockScoreTotal } from './calculations';
+import { fetchKlines, ma, type KlineBar } from './kline-indicators';
 import { newId } from './storage';
 import { normalizeSymbol } from './symbols';
 import type { TradeMode, WatchlistItem } from '../types';
-
-const QQ = import.meta.env.DEV ? '/api/qq' : 'https://web.ifzq.gtimg.cn';
-const SINA = import.meta.env.DEV
-  ? '/api/sina'
-  : 'https://vip.stock.finance.sina.com.cn';
-
-export interface KlineBar {
-  date: string;
-  open: number;
-  close: number;
-  high: number;
-  low: number;
-  volume: number;
-}
 
 export interface ScreenCandidate {
   symbol: string;
@@ -47,40 +34,14 @@ type SinaRow = {
   turnoverratio: string;
 };
 
-function ma(closes: number[], n: number): number {
-  if (closes.length < n) return 0;
-  const slice = closes.slice(-n);
-  return slice.reduce((a, b) => a + b, 0) / n;
-}
+const SINA = import.meta.env.DEV
+  ? '/api/sina'
+  : 'https://vip.stock.finance.sina.com.cn';
+
+export type { KlineBar } from './kline-indicators';
 
 function isStName(name: string): boolean {
   return /ST|退/i.test(name);
-}
-
-/** 腾讯前复权日 K */
-export async function fetchKlines(
-  marketSymbol: string
-): Promise<KlineBar[] | null> {
-  const url = `${QQ}/appstock/app/fqkline/get?param=${marketSymbol},day,,,40,qfq`;
-  try {
-    const res = await fetch(url);
-    const json = (await res.json()) as {
-      data?: Record<string, { qfqday?: string[][] }>;
-    };
-    const key = Object.keys(json.data ?? {})[0];
-    const rows = key ? json.data![key]?.qfqday : undefined;
-    if (!rows?.length) return null;
-    return rows.map((r) => ({
-      date: r[0],
-      open: Number(r[1]),
-      close: Number(r[2]),
-      high: Number(r[3]),
-      low: Number(r[4]),
-      volume: Number(r[5]),
-    }));
-  } catch {
-    return null;
-  }
 }
 
 async function fetchLiquidUniverse(pages = 3, pageSize = 50): Promise<SinaRow[]> {
@@ -132,6 +93,7 @@ function volumeShrinkOnPullback(bars: KlineBar[]): boolean {
 export interface TrendEvalResult {
   passed: boolean;
   fails: string[];
+  failTags: TrendFailTag[];
   reasons: string[];
   price: number;
   changePercent: number;
@@ -141,6 +103,14 @@ export interface TrendEvalResult {
   scores: WatchlistItem['scores'];
   status: WatchlistItem['status'];
 }
+
+export type TrendFailTag =
+  | 'ma20'
+  | 'ma_align'
+  | 'chase'
+  | 'volatility'
+  | 'turnover'
+  | 'volume_shrink';
 
 /** 趋势股规则（对齐 02_选股体系 趋势股观察池），含通过/失败明细 */
 export function evaluateTrendStockDetailed(
@@ -159,26 +129,42 @@ export function evaluateTrendStockDetailed(
 
   const reasons: string[] = [];
   const fails: string[] = [];
+  const failTags: TrendFailTag[] = [];
 
-  if (price < ma20 * 0.97) fails.push('跌破20日线过多');
-  else reasons.push('股价在20日线附近或上方');
+  if (price < ma20 * 0.97) {
+    fails.push('跌破20日线过多');
+    failTags.push('ma20');
+  } else reasons.push('股价在20日线附近或上方');
 
-  if (!(ma5 > ma10 && ma10 > ma20)) fails.push('均线非多头排列');
-  else reasons.push('5/10/20日均线多头');
+  if (!(ma5 > ma10 && ma10 > ma20)) {
+    fails.push('均线非多头排列');
+    failTags.push('ma_align');
+  } else reasons.push('5/10/20日均线多头');
 
-  if (price > ma5 * 1.12) fails.push('远离5日线，不宜追高');
-  else if (price > ma5 * 1.05) reasons.push('贴近5日线运行');
+  if (price > ma5 * 1.12) {
+    fails.push('远离5日线，不宜追高');
+    failTags.push('chase');
+  } else if (price > ma5 * 1.05) reasons.push('贴近5日线运行');
   else reasons.push('靠近短期均线');
 
-  if (changePercent > 7) fails.push('当日涨幅过大');
-  else if (changePercent < -5) fails.push('当日跌幅过大');
-  else reasons.push('当日波动适中');
+  if (changePercent > 7) {
+    fails.push('当日涨幅过大');
+    failTags.push('volatility');
+  } else if (changePercent < -5) {
+    fails.push('当日跌幅过大');
+    failTags.push('volatility');
+  } else reasons.push('当日波动适中');
 
-  if (turnoverRatio < 0.8) fails.push('换手偏低');
-  else reasons.push('成交活跃');
+  if (turnoverRatio < 0.8) {
+    fails.push('换手偏低');
+    failTags.push('turnover');
+  } else reasons.push('成交活跃');
 
-  if (!volumeShrinkOnPullback(bars)) fails.push('回调未明显缩量');
-  else reasons.push('回调缩量特征尚可');
+  const volShrink = volumeShrinkOnPullback(bars);
+  if (!volShrink) {
+    fails.push('回调未明显缩量');
+    failTags.push('volume_shrink');
+  } else reasons.push('回调缩量特征尚可');
 
   const nearMa20 = price <= ma20 * 1.03 && price >= ma20 * 0.98;
   const status: WatchlistItem['status'] = nearMa20 ? 'ready' : 'watch';
@@ -188,7 +174,7 @@ export function evaluateTrendStockDetailed(
     marketEnv: envScorePart,
     sector: 2,
     trend: 4,
-    volumePrice: volumeShrinkOnPullback(bars) ? 3 : 2,
+    volumePrice: volShrink ? 3 : 2,
     buyPointClarity: nearMa20 ? 3 : 2,
     riskReward: 2,
   };
@@ -196,6 +182,7 @@ export function evaluateTrendStockDetailed(
   return {
     passed: fails.length === 0,
     fails,
+    failTags,
     reasons,
     price,
     changePercent,
@@ -314,13 +301,6 @@ export function evaluateEtf(
   };
 }
 
-function envToScorePart(envTotal: number): number {
-  if (envTotal >= 8) return 4;
-  if (envTotal >= 5) return 3;
-  if (envTotal >= 3) return 2;
-  return 1;
-}
-
 function allowEmotionScreen(envTotal: number, emotionStage?: string): boolean {
   if (envTotal >= 5) return true;
   if (!emotionStage) return false;
@@ -366,7 +346,8 @@ export async function runStockScreen(options: {
 
   let done = 0;
   const trendHits = await mapPool(universe, 6, async (row) => {
-    const bars = await fetchKlines(row.symbol);
+    const symbol = normalizeSymbol(row.code);
+    const bars = await fetchKlines(symbol, 'day', 40);
     done++;
     options.onProgress?.({
       phase: '扫描趋势股（均线+量价）',
@@ -381,7 +362,6 @@ export async function runStockScreen(options: {
       envPart
     );
     if (!ev) return null;
-    const symbol = normalizeSymbol(row.code);
     const totalScore = stockScoreTotal({
       id: '',
       symbol,
@@ -467,7 +447,7 @@ export async function runStockScreen(options: {
   });
   for (let i = 0; i < ETF_CODES.length; i++) {
     const etf = ETF_CODES[i]!;
-    const bars = await fetchKlines(`${etf.market}${etf.symbol}`);
+    const bars = await fetchKlines(etf.symbol, 'day', 40);
     options.onProgress?.({
       phase: '扫描 ETF',
       done: i + 1,

@@ -24,3 +24,8 @@ export function symbolToTencentMarket(symbol: string): string {
   const prefix = /^(5|6|9)/.test(code) ? 'sh' : 'sz';
   return `${prefix}${code}`;
 }
+
+/** 稳定 symbol 集合 key，用于 effect / memo 依赖 */
+export function symbolsKey(symbols: string[]): string {
+  return [...new Set(symbols.filter(Boolean))].sort().join(',');
+}

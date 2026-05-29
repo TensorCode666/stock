@@ -6,12 +6,14 @@ import { useMarketData } from '../context/MarketDataContext';
 import { envScoreTotal, TRADE_MODE_LABELS } from '../lib/calculations';
 import {
   ADVICE_TAG_CLASS,
+  DEFAULT_HOLDING_ADVICE,
   evaluateHoldingAdvice,
   type HoldingAdvice,
 } from '../lib/holding-advice';
-import { fetchKlines, type KlineBar } from '../lib/kline-indicators';
+import { fetchKlinesCached } from '../lib/kline-cache';
+import type { KlineBar } from '../lib/kline-indicators';
 import { newId, todayStr } from '../lib/storage';
-import { normalizeSymbol } from '../lib/symbols';
+import { isValidSymbol, normalizeSymbol, symbolsKey } from '../lib/symbols';
 import type { Holding, TradeMode } from '../types';
 
 const URGENCY_LABELS = {
@@ -26,7 +28,7 @@ function emptyHolding(): Holding {
     symbol: '',
     name: '',
     mode: 'trend',
-    buyDate: new Date().toISOString().slice(0, 10),
+    buyDate: todayStr(),
     buyPrice: 0,
     shares: 0,
     stopLoss: 0,
@@ -81,7 +83,7 @@ function AdviceCard({
 
 export function Holdings() {
   const { data, setData } = useApp();
-  const { getQuote, refresh } = useMarketData();
+  const { getQuote, quotes, refresh } = useMarketData();
   const [form, setForm] = useState<Holding | null>(null);
   const [klinesMap, setKlinesMap] = useState<Map<string, KlineBar[]>>(
     new Map()
@@ -90,12 +92,17 @@ export function Holdings() {
 
   const todayEnv = data.envScores.find((e) => e.date === todayStr());
 
+  const holdingSymbolsKey = symbolsKey(
+    data.holdings.map((h) => normalizeSymbol(h.symbol)).filter(Boolean)
+  );
+
   useEffect(() => {
-    const symbols = [
-      ...new Set(data.holdings.map((h) => normalizeSymbol(h.symbol))),
-    ].filter(Boolean);
+    const symbols = holdingSymbolsKey
+      ? holdingSymbolsKey.split(',').filter(Boolean)
+      : [];
     if (symbols.length === 0) {
       setKlinesMap(new Map());
+      setKlinesLoading(false);
       return;
     }
     let cancelled = false;
@@ -103,7 +110,7 @@ export function Holdings() {
     void (async () => {
       const entries = await Promise.all(
         symbols.map(async (sym) => {
-          const bars = await fetchKlines(sym, 'day', 40);
+          const bars = await fetchKlinesCached(sym, 'day', 40);
           return [sym, bars ?? []] as const;
         })
       );
@@ -114,32 +121,62 @@ export function Holdings() {
     return () => {
       cancelled = true;
     };
-  }, [data.holdings]);
+  }, [holdingSymbolsKey]);
+
+  const quotesKey = useMemo(() => {
+    return data.holdings
+      .map((h) => {
+        const sym = normalizeSymbol(h.symbol);
+        const q = quotes.get(sym);
+        return q
+          ? `${sym}:${q.price.toFixed(2)}:${q.changePercent.toFixed(2)}`
+          : sym;
+      })
+      .join('|');
+  }, [data.holdings, quotes]);
 
   const adviceById = useMemo(() => {
     const map = new Map<string, HoldingAdvice>();
     for (const h of data.holdings) {
       const sym = normalizeSymbol(h.symbol);
+      const bars = klinesMap.get(sym);
+      const adviceReady = Boolean(bars?.length);
       map.set(
         h.id,
-        evaluateHoldingAdvice({
-          holding: h,
-          quote: getQuote(sym),
-          bars: klinesMap.get(sym),
-          envScore: todayEnv ?? null,
-        })
+        adviceReady
+          ? evaluateHoldingAdvice({
+              holding: h,
+              quote: getQuote(sym),
+              bars,
+              envScore: todayEnv ?? null,
+            })
+          : DEFAULT_HOLDING_ADVICE
       );
     }
     return map;
-  }, [data.holdings, getQuote, klinesMap, todayEnv]);
+  }, [data.holdings, getQuote, klinesMap, todayEnv, quotesKey]);
 
   const save = () => {
     if (!form?.symbol.trim()) return;
+    const sym = normalizeSymbol(form.symbol);
+    if (!isValidSymbol(sym)) {
+      alert('请输入有效的 6 位股票代码');
+      return;
+    }
+    if (form.buyPrice <= 0) {
+      alert('请填写有效买入价');
+      return;
+    }
+    if (form.shares <= 0) {
+      alert('请填写买入股数');
+      return;
+    }
+    const payload = { ...form, symbol: sym };
     setData((prev) => {
       const exists = prev.holdings.some((h) => h.id === form.id);
       const holdings = exists
-        ? prev.holdings.map((h) => (h.id === form.id ? form : h))
-        : [...prev.holdings, form];
+        ? prev.holdings.map((h) => (h.id === form.id ? payload : h))
+        : [...prev.holdings, payload];
       return { ...prev, holdings };
     });
     setForm(null);
@@ -339,14 +376,21 @@ export function Holdings() {
               : ' 今日尚未录入环境评分。'}
           </p>
           <div className="advice-grid">
-            {data.holdings.map((h) => (
+            {data.holdings.map((h) => {
+              const sym = normalizeSymbol(h.symbol);
+              const advice =
+                adviceById.get(h.id) ?? DEFAULT_HOLDING_ADVICE;
+              const loading =
+                klinesLoading && !klinesMap.get(sym)?.length;
+              return (
               <AdviceCard
                 key={h.id}
                 holding={h}
-                advice={adviceById.get(h.id)!}
-                loading={klinesLoading && !klinesMap.has(normalizeSymbol(h.symbol))}
+                advice={advice}
+                loading={loading}
               />
-            ))}
+            );
+            })}
           </div>
         </div>
       )}
@@ -373,7 +417,11 @@ export function Holdings() {
             </thead>
             <tbody>
               {data.holdings.map((h) => {
-                const advice = adviceById.get(h.id)!;
+                const sym = normalizeSymbol(h.symbol);
+                const advice =
+                  adviceById.get(h.id) ?? DEFAULT_HOLDING_ADVICE;
+                const adviceLoading =
+                  klinesLoading && !klinesMap.get(sym)?.length;
                 return (
                   <tr key={h.id}>
                     <td>
@@ -381,12 +429,16 @@ export function Holdings() {
                     </td>
                     <td>{TRADE_MODE_LABELS[h.mode]}</td>
                     <td>
-                      <span
-                        className={`tag ${ADVICE_TAG_CLASS[advice.action]}`}
-                        title={advice.reasons.join('；')}
-                      >
-                        {advice.label}
-                      </span>
+                      {adviceLoading ? (
+                        <span className="muted small">—</span>
+                      ) : (
+                        <span
+                          className={`tag ${ADVICE_TAG_CLASS[advice.action]}`}
+                          title={advice.reasons.join('；')}
+                        >
+                          {advice.label}
+                        </span>
+                      )}
                     </td>
                     <td>
                       {h.buyDate} @ {h.buyPrice}

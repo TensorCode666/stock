@@ -1,5 +1,13 @@
 import type { MarketEnvScore, WatchlistItem } from '../types';
 
+/** 环境总分 → 选股评分中的 marketEnv 维度（1–4） */
+export function envToScorePart(envTotal: number): number {
+  if (envTotal >= 8) return 4;
+  if (envTotal >= 5) return 3;
+  if (envTotal >= 3) return 2;
+  return 1;
+}
+
 export function envScoreTotal(s: MarketEnvScore): number {
   return (
     s.indexTrend +

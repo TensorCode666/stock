@@ -10,22 +10,16 @@ import {
 import { formatChangePercent, searchStocks } from '../lib/market-api';
 import {
   buildPracticeAttempt,
+  chartBarsForPractice,
   computePracticeVerdict,
   gradePracticeAnswer,
   loadPracticeContext,
   type PracticeContext,
   type PracticeGrade,
 } from '../lib/practice';
+import { todayStr, trimPracticeAttempts } from '../lib/storage';
 import { normalizeSymbol } from '../lib/symbols';
 import type { TradeMode } from '../types';
-
-function localTodayStr(): string {
-  const d = new Date();
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
-}
 
 function defaultPracticeDate(): string {
   const d = new Date();
@@ -193,7 +187,10 @@ export function Practice() {
     );
     setData((prev) => ({
       ...prev,
-      practiceAttempts: [...(prev.practiceAttempts ?? []), attempt],
+      practiceAttempts: trimPracticeAttempts([
+        ...(prev.practiceAttempts ?? []),
+        attempt,
+      ]),
     }));
   }
 
@@ -285,7 +282,7 @@ export function Practice() {
               <input
                 type="date"
                 value={date}
-                max={localTodayStr()}
+                max={todayStr()}
                 onChange={(e) => setDate(e.target.value)}
               />
               <span className="small">
@@ -388,7 +385,10 @@ export function Practice() {
               K 线（仅显示截止 {ctx.asOfDate}，不含之后走势）
             </h3>
             {ctx.bars.length > 0 ? (
-              <StockChartPanels bars={ctx.bars} period="day" />
+              <StockChartPanels
+                bars={chartBarsForPractice(ctx.bars)}
+                period="day"
+              />
             ) : (
               <p className="muted">暂无 K 线数据</p>
             )}
@@ -505,6 +505,20 @@ export function Practice() {
                   <li key={i}>{line}</li>
                 ))}
               </ul>
+
+              {grade.verdict.scores && (
+                <div className="practice-score-breakdown">
+                  <h4 className="small muted">评分明细（满分约 18）</h4>
+                  <ul className="small score-dims">
+                    <li>市场环境 {grade.verdict.scores.marketEnv}</li>
+                    <li>板块 {grade.verdict.scores.sector}</li>
+                    <li>趋势 {grade.verdict.scores.trend}</li>
+                    <li>量价 {grade.verdict.scores.volumePrice}</li>
+                    <li>买点清晰度 {grade.verdict.scores.buyPointClarity}</li>
+                    <li>风险收益比 {grade.verdict.scores.riskReward}</li>
+                  </ul>
+                </div>
+              )}
 
               {grade.verdict.fails.length > 0 && (
                 <div className="practice-fails">

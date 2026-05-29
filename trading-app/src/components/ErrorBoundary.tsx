@@ -1,4 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
+import { STORAGE_KEY } from '../lib/storage';
 
 type Props = { children: ReactNode };
 
@@ -46,7 +47,7 @@ export class ErrorBoundary extends Component<Props, State> {
               className="btn"
               onClick={() => {
                 try {
-                  localStorage.removeItem('stock-trading-system-v1');
+                  localStorage.removeItem(STORAGE_KEY);
                 } catch {
                   /* ignore */
                 }

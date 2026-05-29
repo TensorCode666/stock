@@ -1,5 +1,5 @@
 import type { AppData } from '../types';
-import { defaultAppData, saveData } from './storage';
+import { normalizeAppData, saveData, todayStr } from './storage';
 
 export function exportAppData(data: AppData): string {
   return JSON.stringify(data, null, 2);
@@ -12,7 +12,7 @@ export function downloadAppData(data: AppData, filename?: string): void {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = filename ?? `stock-trading-backup-${new Date().toISOString().slice(0, 10)}.json`;
+  a.download = filename ?? `stock-trading-backup-${todayStr()}.json`;
   a.click();
   URL.revokeObjectURL(url);
 }
@@ -22,19 +22,7 @@ export function parseImportedData(raw: string): AppData {
   if (!parsed || typeof parsed !== 'object') {
     throw new Error('无效的备份文件');
   }
-  return {
-    ...defaultAppData,
-    ...parsed,
-    settings: { ...defaultAppData.settings, ...parsed.settings },
-    favorites: parsed.favorites ?? defaultAppData.favorites,
-    watchlist: parsed.watchlist ?? defaultAppData.watchlist,
-    holdings: parsed.holdings ?? defaultAppData.holdings,
-    trades: parsed.trades ?? defaultAppData.trades,
-    tradePlans: parsed.tradePlans ?? defaultAppData.tradePlans,
-    envScores: parsed.envScores ?? defaultAppData.envScores,
-    dailyChecklists:
-      parsed.dailyChecklists ?? defaultAppData.dailyChecklists,
-  };
+  return normalizeAppData(parsed);
 }
 
 export function importAppDataFromFile(file: File): Promise<AppData> {

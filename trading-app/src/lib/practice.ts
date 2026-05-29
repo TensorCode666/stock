@@ -1,10 +1,17 @@
-import { stockScoreTotal } from './calculations';
-import { enrichBars, fetchKlines, type EnrichedBar } from './kline-indicators';
+import { envToScorePart, stockScoreTotal } from './calculations';
+import {
+  enrichBars,
+  estimateTurnoverRatio,
+  fetchKlines,
+  ma,
+  toPlainBars,
+  type EnrichedBar,
+  type KlineBar,
+} from './kline-indicators';
 import {
   evaluateEmotionStockDetailed,
   evaluateEtf,
   evaluateTrendStockDetailed,
-  type KlineBar,
 } from './stock-screener';
 import { normalizeSymbol } from './symbols';
 import type { PracticeAttempt, TradeMode, WatchlistItem } from '../types';
@@ -43,16 +50,17 @@ export type PracticeGrade = {
   feedback: string[];
 };
 
-function envToScorePart(envTotal: number): number {
-  if (envTotal >= 8) return 4;
-  if (envTotal >= 5) return 3;
-  if (envTotal >= 3) return 2;
-  return 1;
-}
-
 /** 练习需至少 22 根日 K；腾讯接口单次最多约 640 根 */
 const PRACTICE_KLINE_LIMIT = 640;
 const MIN_BARS_FOR_TREND = 22;
+
+/** 图表展示条数上限（评估仍用完整 sliced） */
+export const PRACTICE_CHART_BAR_LIMIT = 120;
+
+export function chartBarsForPractice(bars: EnrichedBar[]): EnrichedBar[] {
+  if (bars.length <= PRACTICE_CHART_BAR_LIMIT) return bars;
+  return bars.slice(-PRACTICE_CHART_BAR_LIMIT);
+}
 
 /** 截取截至指定日期的 K 线（含当日） */
 export function sliceBarsAsOf(bars: KlineBar[], asOfDate: string): KlineBar[] {
@@ -76,17 +84,6 @@ export function changePercentOnDate(bars: KlineBar[]): number {
   const prev = bars[bars.length - 2]!;
   if (!prev.close) return 0;
   return ((cur.close - prev.close) / prev.close) * 100;
-}
-
-/** 用成交量相对 20 日均量估算换手率（历史练习无真实换手数据时的近似） */
-export function estimateTurnoverRatio(bars: KlineBar[]): number {
-  if (bars.length < 5) return 1;
-  const recent = bars.slice(-20);
-  const last = recent[recent.length - 1]!;
-  const avgVol =
-    recent.reduce((s, b) => s + b.volume, 0) / recent.length || 1;
-  const ratio = last.volume / avgVol;
-  return Math.min(15, Math.max(0.3, ratio * 1.5));
 }
 
 export async function loadPracticeContext(options: {
@@ -118,9 +115,12 @@ export async function loadPracticeContext(options: {
 
   const sliced = sliceBarsAsOf(raw, asOfDate);
   if (sliced.length < MIN_BARS_FOR_TREND) {
-    const needFrom = new Date(asOfDate);
+    const needFrom = new Date(`${asOfDate}T12:00:00`);
     needFrom.setDate(needFrom.getDate() - 45);
-    const suggestFrom = needFrom.toISOString().slice(0, 10);
+    const y = needFrom.getFullYear();
+    const m = String(needFrom.getMonth() + 1).padStart(2, '0');
+    const day = String(needFrom.getDate()).padStart(2, '0');
+    const suggestFrom = `${y}-${m}-${day}`;
     return {
       error: `截止 ${asOfDate} 仅有 ${sliced.length} 根 K 线（需至少 ${MIN_BARS_FOR_TREND} 根）。请选 ${suggestFrom} 之后的日期，或选更近的交易日`,
     };
@@ -133,10 +133,6 @@ export async function loadPracticeContext(options: {
   const enriched = enrichBars(sliced);
   const last = enriched[enriched.length - 1]!;
   const closes = sliced.map((b) => b.close);
-  const ma10 =
-    closes.length >= 10
-      ? closes.slice(-10).reduce((a, b) => a + b, 0) / 10
-      : 0;
 
   return {
     symbol,
@@ -150,9 +146,9 @@ export async function loadPracticeContext(options: {
     changePercent,
     bars: enriched,
     price: last.close,
-    ma5: last.ma5 ?? 0,
-    ma10,
-    ma20: last.ma20 ?? 0,
+    ma5: last.ma5 ?? ma(closes, 5),
+    ma10: ma(closes, 10),
+    ma20: last.ma20 ?? ma(closes, 20),
   };
 }
 
@@ -165,6 +161,7 @@ function toPracticeStatus(
 export function computePracticeVerdict(ctx: PracticeContext): PracticeVerdict {
   const envPart = envToScorePart(ctx.envTotal);
   const minScore = ctx.mode === 'emotion' ? 10 : 12;
+  const plainBars = toPlainBars(ctx.bars);
 
   if (ctx.mode === 'emotion') {
     const ev = evaluateEmotionStockDetailed(
@@ -194,27 +191,10 @@ export function computePracticeVerdict(ctx: PracticeContext): PracticeVerdict {
   }
 
   if (ctx.mode === 'etf') {
-    const ev = evaluateEtf(
-      ctx.bars.map(({ date, open, high, low, close, volume }) => ({
-        date,
-        open,
-        high,
-        low,
-        close,
-        volume,
-      })),
-      envPart
-    );
+    const ev = evaluateEtf(plainBars, envPart);
     if (!ev) {
       const detail = evaluateTrendStockDetailed(
-        ctx.bars.map(({ date, open, high, low, close, volume }) => ({
-          date,
-          open,
-          high,
-          low,
-          close,
-          volume,
-        })),
+        plainBars,
         ctx.changePercent,
         ctx.turnoverRatio,
         envPart
@@ -226,6 +206,7 @@ export function computePracticeVerdict(ctx: PracticeContext): PracticeVerdict {
         passedRules: false,
         reasons: detail?.reasons ?? [],
         fails: detail?.fails ?? ['不符合 ETF 趋势规则'],
+        scores: detail?.scores,
       };
     }
     const totalScore = stockScoreTotal({
@@ -249,16 +230,8 @@ export function computePracticeVerdict(ctx: PracticeContext): PracticeVerdict {
     };
   }
 
-  const bars = ctx.bars.map(({ date, open, high, low, close, volume }) => ({
-    date,
-    open,
-    high,
-    low,
-    close,
-    volume,
-  }));
   const ev = evaluateTrendStockDetailed(
-    bars,
+    plainBars,
     ctx.changePercent,
     ctx.turnoverRatio,
     envPart
