@@ -1,5 +1,6 @@
 import { envToScorePart, stockScoreTotal } from './calculations';
-import { fetchKlines, ma, type KlineBar } from './kline-indicators';
+import { fetchKlinesCached } from './kline-cache';
+import { ma, type KlineBar } from './kline-indicators';
 import { newId } from './storage';
 import { normalizeSymbol } from './symbols';
 import type { TradeMode, WatchlistItem } from '../types';
@@ -347,7 +348,7 @@ export async function runStockScreen(options: {
   let done = 0;
   const trendHits = await mapPool(universe, 6, async (row) => {
     const symbol = normalizeSymbol(row.code);
-    const bars = await fetchKlines(symbol, 'day', 40);
+    const bars = await fetchKlinesCached(symbol, 'day', 40);
     done++;
     options.onProgress?.({
       phase: '扫描趋势股（均线+量价）',
@@ -447,7 +448,7 @@ export async function runStockScreen(options: {
   });
   for (let i = 0; i < ETF_CODES.length; i++) {
     const etf = ETF_CODES[i]!;
-    const bars = await fetchKlines(etf.symbol, 'day', 40);
+    const bars = await fetchKlinesCached(etf.symbol, 'day', 40);
     options.onProgress?.({
       phase: '扫描 ETF',
       done: i + 1,

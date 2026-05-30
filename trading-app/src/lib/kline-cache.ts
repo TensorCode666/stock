@@ -1,8 +1,11 @@
 import {
+  enrichBars,
   fetchKlines,
   type KlineBar,
   type KlinePeriod,
+  type StockChartData,
 } from './kline-indicators';
+import { normalizeSymbol } from './symbols';
 
 const TTL_MS = 5 * 60 * 1000;
 
@@ -12,7 +15,7 @@ function cacheKey(symbol: string, period: KlinePeriod, limit: number): string {
   return `${symbol}:${period}:${limit}`;
 }
 
-/** 带 TTL 的 K 线缓存，避免持仓编辑等非 symbol 变更触发重复请求 */
+/** 带 TTL 的 K 线缓存，避免重复请求 */
 export async function fetchKlinesCached(
   symbol: string,
   period: KlinePeriod = 'day',
@@ -31,6 +34,19 @@ export async function fetchKlinesCached(
   return bars;
 }
 
+/** 带 TTL 的图表数据（含 enrichBars） */
+export async function fetchStockChartDataCached(
+  symbol: string,
+  period: KlinePeriod = 'day',
+  limit?: number
+): Promise<StockChartData | null> {
+  const code = normalizeSymbol(symbol);
+  if (!code) return null;
+  const bars = await fetchKlinesCached(code, period, limit);
+  if (!bars?.length) return null;
+  return { symbol: code, period, bars: enrichBars(bars) };
+}
+
 export function invalidateKlineCache(symbol?: string): void {
   if (!symbol) {
     cache.clear();
@@ -41,3 +57,5 @@ export function invalidateKlineCache(symbol?: string): void {
     if (key.startsWith(prefix)) cache.delete(key);
   }
 }
+
+export type { KlineBar, KlinePeriod, StockChartData };

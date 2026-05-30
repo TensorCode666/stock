@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { StockChartPanels } from '../components/StockChartPanels';
+import { LazyStockChartPanels } from '../components/LazyStockChartPanels';
 import { StockSearch } from '../components/StockSearch';
 import { useApp } from '../context/AppContext';
 import {
@@ -385,7 +385,7 @@ export function Practice() {
               K 线（仅显示截止 {ctx.asOfDate}，不含之后走势）
             </h3>
             {ctx.bars.length > 0 ? (
-              <StockChartPanels
+              <LazyStockChartPanels
                 bars={chartBarsForPractice(ctx.bars)}
                 period="day"
               />

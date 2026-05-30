@@ -1,11 +1,11 @@
+import { memo } from 'react';
 import {
   changeClass,
   formatChangePercent,
   type StockQuote,
 } from '../lib/market-api';
 
-export function StockQuoteHero({
-  symbol,
+export const StockQuoteHero = memo(function StockQuoteHero({  symbol,
   name,
   quote,
   compact,
@@ -47,4 +47,11 @@ export function StockQuoteHero({
       </div>
     </div>
   );
-}
+}, (prev, next) =>
+  prev.symbol === next.symbol &&
+  prev.name === next.name &&
+  prev.compact === next.compact &&
+  prev.quote?.price === next.quote?.price &&
+  prev.quote?.changePercent === next.quote?.changePercent &&
+  prev.quote?.changeAmount === next.quote?.changeAmount
+);

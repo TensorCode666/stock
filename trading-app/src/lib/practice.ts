@@ -2,12 +2,12 @@ import { envToScorePart, stockScoreTotal } from './calculations';
 import {
   enrichBars,
   estimateTurnoverRatio,
-  fetchKlines,
   ma,
   toPlainBars,
   type EnrichedBar,
   type KlineBar,
 } from './kline-indicators';
+import { fetchKlinesCached } from './kline-cache';
 import {
   evaluateEmotionStockDetailed,
   evaluateEtf,
@@ -99,7 +99,7 @@ export async function loadPracticeContext(options: {
     return { error: '无效股票代码' };
   }
 
-  const raw = await fetchKlines(symbol, 'day', PRACTICE_KLINE_LIMIT);
+  const raw = await fetchKlinesCached(symbol, 'day', PRACTICE_KLINE_LIMIT);
   if (!raw?.length) {
     return { error: 'K 线数据加载失败，请检查网络或股票代码' };
   }

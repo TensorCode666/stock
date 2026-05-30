@@ -20,18 +20,30 @@ export function StockSearch({
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (q.trim().length < 2) {
+    const trimmed = q.trim();
+    if (trimmed.length < 2) {
       setResults([]);
+      setLoading(false);
       return;
     }
+    let cancelled = false;
     const t = setTimeout(() => {
       setLoading(true);
-      searchStocks(q)
-        .then(setResults)
-        .catch(() => setResults([]))
-        .finally(() => setLoading(false));
+      searchStocks(trimmed)
+        .then((rows) => {
+          if (!cancelled) setResults(rows);
+        })
+        .catch(() => {
+          if (!cancelled) setResults([]);
+        })
+        .finally(() => {
+          if (!cancelled) setLoading(false);
+        });
     }, 300);
-    return () => clearTimeout(t);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
   }, [q]);
 
   return (

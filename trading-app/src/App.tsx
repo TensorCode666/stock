@@ -3,8 +3,14 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { Layout } from './components/Layout';
 import { AppProvider } from './context/AppContext';
 import { MarketDataProvider } from './context/MarketDataContext';
-import { Dashboard } from './pages/Dashboard';
-import { Rules } from './pages/Rules';
+
+const Dashboard = lazy(() =>
+  import('./pages/Dashboard').then((m) => ({ default: m.Dashboard }))
+);
+
+const Rules = lazy(() =>
+  import('./pages/Rules').then((m) => ({ default: m.Rules }))
+);
 
 const BuyPlan = lazy(() =>
   import('./pages/BuyPlan').then((m) => ({ default: m.BuyPlan }))
@@ -54,7 +60,14 @@ export default function App() {
         >
           <Routes>
             <Route path="/" element={<Layout />}>
-              <Route index element={<Dashboard />} />
+              <Route
+                index
+                element={
+                  <LazyPage>
+                    <Dashboard />
+                  </LazyPage>
+                }
+              />
               <Route
                 path="env"
                 element={
@@ -135,7 +148,14 @@ export default function App() {
                   </LazyPage>
                 }
               />
-              <Route path="rules" element={<Rules />} />
+              <Route
+                path="rules"
+                element={
+                  <LazyPage>
+                    <Rules />
+                  </LazyPage>
+                }
+              />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Route>
           </Routes>

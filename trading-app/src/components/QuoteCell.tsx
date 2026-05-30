@@ -1,10 +1,21 @@
+import { memo } from 'react';
 import {
   changeClass,
   formatChangePercent,
   type StockQuote,
 } from '../lib/market-api';
 
-export function QuoteCell({ quote }: { quote?: StockQuote }) {
+function quoteEqual(a?: StockQuote, b?: StockQuote): boolean {
+  if (a === b) return true;
+  if (!a || !b) return !a && !b;
+  return a.price === b.price && a.changePercent === b.changePercent;
+}
+
+export const QuoteCell = memo(function QuoteCell({
+  quote,
+}: {
+  quote?: StockQuote;
+}) {
   if (!quote) return <span className="muted">—</span>;
   const cls = changeClass(quote.changePercent);
   return (
@@ -15,9 +26,9 @@ export function QuoteCell({ quote }: { quote?: StockQuote }) {
       </span>
     </span>
   );
-}
+}, (prev, next) => quoteEqual(prev.quote, next.quote));
 
-export function HoldingPnl({
+export const HoldingPnl = memo(function HoldingPnl({
   quote,
   buyPrice,
   shares,
@@ -40,4 +51,8 @@ export function HoldingPnl({
       </span>
     </span>
   );
-}
+}, (prev, next) =>
+  prev.buyPrice === next.buyPrice &&
+  prev.shares === next.shares &&
+  quoteEqual(prev.quote, next.quote)
+);

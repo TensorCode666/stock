@@ -1,17 +1,9 @@
 import { Link } from 'react-router-dom';
+import { FavoriteRow } from '../components/FavoriteRow';
 import { useApp } from '../context/AppContext';
-import { useMarketData } from '../context/MarketDataContext';
-import { changeClass } from '../lib/market-api';
-import {
-  formatAddedAt,
-  formatPnlPercent,
-  pnlPercentFromInitial,
-} from '../lib/favorites';
-import { normalizeSymbol } from '../lib/symbols';
 
 export function Favorites() {
   const { data, setData } = useApp();
-  const { getQuote } = useMarketData();
   const list = data.favorites;
 
   const remove = (id: string) => {
@@ -53,60 +45,9 @@ export function Favorites() {
               </tr>
             </thead>
             <tbody>
-              {list.map((f) => {
-                const quote = getQuote(f.symbol);
-                const current = quote?.price ?? 0;
-                const pnl = pnlPercentFromInitial(f.initialPrice, current);
-                return (
-                  <tr key={f.id}>
-                    <td>
-                      <Link
-                        to={`/stock/${f.symbol}`}
-                        state={{ name: f.name }}
-                        className="stock-link"
-                      >
-                        {f.symbol}
-                      </Link>
-                    </td>
-                    <td>
-                      <Link
-                        to={`/stock/${normalizeSymbol(f.symbol)}`}
-                        state={{ name: f.name }}
-                        className="stock-link"
-                      >
-                        {f.name}
-                      </Link>
-                    </td>
-                    <td>{f.initialPrice.toFixed(2)}</td>
-                    <td className="small">{formatAddedAt(f.addedAt)}</td>
-                    <td>
-                      {current > 0 ? (
-                        <strong>{current.toFixed(2)}</strong>
-                      ) : (
-                        <span className="muted">—</span>
-                      )}
-                    </td>
-                    <td>
-                      {pnl !== null ? (
-                        <span className={changeClass(pnl)}>
-                          {formatPnlPercent(pnl)}
-                        </span>
-                      ) : (
-                        <span className="muted">—</span>
-                      )}
-                    </td>
-                    <td className="actions">
-                      <button
-                        type="button"
-                        className="btn sm danger"
-                        onClick={() => remove(f.id)}
-                      >
-                        移除
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
+              {list.map((f) => (
+                <FavoriteRow key={f.id} item={f} onRemove={remove} />
+              ))}
             </tbody>
           </table>
         )}

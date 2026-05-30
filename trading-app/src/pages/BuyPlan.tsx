@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { useMarketData } from '../context/MarketDataContext';
+import { useQuote } from '../context/MarketDataContext';
+import { normalizeSymbol } from '../lib/symbols';
 import {
   envScoreTotal,
   riskRewardRatio,
@@ -57,7 +58,6 @@ function emptyPlan(): TradePlan {
 
 export function BuyPlan() {
   const { data, setData } = useApp();
-  const { getQuote } = useMarketData();
   const todayEnv = data.envScores.find((e) => e.date === todayStr());
   const envTotal = todayEnv ? envScoreTotal(todayEnv) : 0;
 
@@ -66,6 +66,8 @@ export function BuyPlan() {
     p.envScore = envTotal;
     return p;
   });
+
+  const quote = useQuote(form.symbol ? normalizeSymbol(form.symbol) : '');
 
   const rr =
     form.buyPrice > 0
@@ -223,16 +225,15 @@ export function BuyPlan() {
                     setForm({ ...form, buyPrice: Number(e.target.value) })
                   }
                 />
-                {form.symbol && getQuote(form.symbol) && (
+                {form.symbol && quote && (
                   <button
                     type="button"
                     className="btn sm"
                     onClick={() => {
-                      const q = getQuote(form.symbol);
-                      if (q) setForm({ ...form, buyPrice: q.price });
+                      if (quote) setForm({ ...form, buyPrice: quote.price });
                     }}
                   >
-                    填入现价 {getQuote(form.symbol)!.price.toFixed(2)}
+                    填入现价 {quote.price.toFixed(2)}
                   </button>
                 )}
               </div>

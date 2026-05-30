@@ -1,15 +1,16 @@
-import { useMemo, useState } from 'react';
+import { memo, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { QuoteCell } from '../components/QuoteCell';
 import { StockSearch } from '../components/StockSearch';
 import { useApp } from '../context/AppContext';
-import { useMarketData } from '../context/MarketDataContext';
+import { useQuote } from '../context/MarketDataContext';
 import {
   envScoreTotal,
   stockScoreLabel,
   stockScoreTotal,
   TRADE_MODE_LABELS,
 } from '../lib/calculations';
+import { quotesStore } from '../lib/quotes-store';
 import {
   mergeCandidatesToWatchlist,
   runStockScreen,
@@ -56,9 +57,95 @@ function emptyItem(): WatchlistItem {
   };
 }
 
+type WatchlistRowProps = {
+  item: WatchlistItem;
+  inFav: boolean;
+  inHold: boolean;
+  onBuy: (w: WatchlistItem) => void;
+  onFavorite: (w: WatchlistItem) => void;
+  onEdit: (w: WatchlistItem) => void;
+  onRemove: (id: string) => void;
+};
+
+const WatchlistRow = memo(function WatchlistRow({
+  item: w,
+  inFav,
+  inHold,
+  onBuy,
+  onFavorite,
+  onEdit,
+  onRemove,
+}: WatchlistRowProps) {
+  const quote = useQuote(w.symbol);
+    const total = stockScoreTotal(w);
+    const label = stockScoreLabel(total);
+    return (
+      <tr>
+        <td>
+          <Link
+            to={`/stock/${w.symbol}`}
+            state={{ name: w.name, watchlistId: w.id }}
+            className="stock-link"
+          >
+            {w.symbol}
+          </Link>
+        </td>
+        <td>
+          <Link
+            to={`/stock/${w.symbol}`}
+            state={{ name: w.name, watchlistId: w.id }}
+            className="stock-link"
+          >
+            {w.name}
+          </Link>
+        </td>
+        <td>{TRADE_MODE_LABELS[w.mode]}</td>
+        <td>
+          <strong>{total}</strong>/20
+          <span className="small block">{label.label}</span>
+        </td>
+        <td>
+          <QuoteCell quote={quote} />
+        </td>
+        <td className="small reason-cell">
+          {w.screenReasons?.slice(0, 2).join('；') ||
+            w.notes?.slice(0, 40) ||
+            '—'}
+        </td>
+        <td>{w.status === 'ready' ? '待买点' : '观察'}</td>
+        <td className="actions">
+          <button
+            type="button"
+            className="btn sm primary"
+            onClick={() => void onBuy(w)}
+          >
+            {inHold ? '加仓' : '买入'}
+          </button>
+          <button
+            type="button"
+            className="btn sm accent"
+            disabled={inFav}
+            onClick={() => void onFavorite(w)}
+          >
+            {inFav ? '已自选' : '加自选'}
+          </button>
+          <button type="button" className="btn sm" onClick={() => onEdit(w)}>
+            编辑
+          </button>
+          <button
+            type="button"
+            className="btn sm danger"
+            onClick={() => onRemove(w.id)}
+          >
+            剔除
+          </button>
+        </td>
+      </tr>
+    );
+});
+
 export function Watchlist() {
   const { data, setData } = useApp();
-  const { getQuote, refresh } = useMarketData();
   const [editing, setEditing] = useState<WatchlistItem | null>(null);
   const [scanning, setScanning] = useState(false);
   const [progress, setProgress] = useState<ScreenProgress | null>(null);
@@ -69,9 +156,18 @@ export function Watchlist() {
   const todayEnv = data.envScores.find((e) => e.date === todayStr());
   const envTotal = todayEnv ? envScoreTotal(todayEnv) : 5;
 
-  const active = data.watchlist.filter((w) => w.status !== 'removed');
-  const screened = active.filter((w) => w.source === 'screen');
-  const manual = active.filter((w) => w.source !== 'screen');
+  const active = useMemo(
+    () => data.watchlist.filter((w) => w.status !== 'removed'),
+    [data.watchlist]
+  );
+  const screened = useMemo(
+    () => active.filter((w) => w.source === 'screen'),
+    [active]
+  );
+  const manual = useMemo(
+    () => active.filter((w) => w.source !== 'screen'),
+    [active]
+  );
 
   const lastScreenTime = useMemo(() => {
     const times = screened
@@ -112,7 +208,6 @@ export function Watchlist() {
       watchlist: mergeCandidatesToWatchlist(prev.watchlist, preview),
     }));
     setPreview([]);
-    void refresh();
   };
 
   const saveItem = () => {
@@ -126,7 +221,6 @@ export function Watchlist() {
       return { ...prev, watchlist };
     });
     setEditing(null);
-    void refresh();
   };
 
   const remove = (id: string) => {
@@ -144,7 +238,7 @@ export function Watchlist() {
       alert('代码无效');
       return;
     }
-    let price = getQuote(sym)?.price ?? 0;
+    let price = quotesStore.getQuote(sym)?.price ?? 0;
     if (!price) {
       const q = await fetchStockQuote(sym);
       price = q?.price ?? 0;
@@ -154,7 +248,6 @@ export function Watchlist() {
       return;
     }
     setBuyDraft(createHoldingDraft(w, price, data.settings));
-    void refresh();
   };
 
   const confirmBuy = () => {
@@ -177,7 +270,6 @@ export function Watchlist() {
     }));
     setBuyDraft(null);
     alert('已记入持仓，可在「持仓」页查看与编辑');
-    void refresh();
   };
 
   const addToFavorites = async (w: WatchlistItem) => {
@@ -187,7 +279,7 @@ export function Watchlist() {
       alert('该标的已在自选股中');
       return;
     }
-    let price = getQuote(sym)?.price ?? 0;
+    let price = quotesStore.getQuote(sym)?.price ?? 0;
     if (!price) {
       const q = await fetchStockQuote(sym);
       price = q?.price ?? 0;
@@ -209,7 +301,6 @@ export function Watchlist() {
         },
       ],
     }));
-    void refresh();
   };
 
   const renderTable = (items: WatchlistItem[], title: string) => (
@@ -235,79 +326,18 @@ export function Watchlist() {
             </tr>
           </thead>
           <tbody>
-            {items.map((w) => {
-              const total = stockScoreTotal(w);
-              const label = stockScoreLabel(total);
-              const inFav = isFavorite(data.favorites, w.symbol);
-              const inHold = !!findHoldingBySymbol(data.holdings, w.symbol);
-              return (
-                <tr key={w.id}>
-                  <td>
-                    <Link
-                      to={`/stock/${w.symbol}`}
-                      state={{ name: w.name, watchlistId: w.id }}
-                      className="stock-link"
-                    >
-                      {w.symbol}
-                    </Link>
-                  </td>
-                  <td>
-                    <Link
-                      to={`/stock/${w.symbol}`}
-                      state={{ name: w.name, watchlistId: w.id }}
-                      className="stock-link"
-                    >
-                      {w.name}
-                    </Link>
-                  </td>
-                  <td>{TRADE_MODE_LABELS[w.mode]}</td>
-                  <td>
-                    <strong>{total}</strong>/20
-                    <span className="small block">{label.label}</span>
-                  </td>
-                  <td>
-                    <QuoteCell quote={getQuote(w.symbol)} />
-                  </td>
-                  <td className="small reason-cell">
-                    {w.screenReasons?.slice(0, 2).join('；') ||
-                      w.notes?.slice(0, 40) ||
-                      '—'}
-                  </td>
-                  <td>{w.status === 'ready' ? '待买点' : '观察'}</td>
-                  <td className="actions">
-                    <button
-                      type="button"
-                      className="btn sm primary"
-                      onClick={() => void openBuy(w)}
-                    >
-                      {inHold ? '加仓' : '买入'}
-                    </button>
-                    <button
-                      type="button"
-                      className="btn sm accent"
-                      disabled={inFav}
-                      onClick={() => void addToFavorites(w)}
-                    >
-                      {inFav ? '已自选' : '加自选'}
-                    </button>
-                    <button
-                      type="button"
-                      className="btn sm"
-                      onClick={() => setEditing(w)}
-                    >
-                      编辑
-                    </button>
-                    <button
-                      type="button"
-                      className="btn sm danger"
-                      onClick={() => remove(w.id)}
-                    >
-                      剔除
-                    </button>
-                  </td>
-                </tr>
-              );
-            })}
+            {items.map((w) => (
+              <WatchlistRow
+                key={w.id}
+                item={w}
+                inFav={isFavorite(data.favorites, w.symbol)}
+                inHold={!!findHoldingBySymbol(data.holdings, w.symbol)}
+                onBuy={openBuy}
+                onFavorite={addToFavorites}
+                onEdit={setEditing}
+                onRemove={remove}
+              />
+            ))}
           </tbody>
         </table>
       )}
@@ -548,7 +578,6 @@ export function Watchlist() {
                 name: r.name,
                 source: 'manual',
               });
-              void refresh();
             }}
           />
           <div className="form-grid">

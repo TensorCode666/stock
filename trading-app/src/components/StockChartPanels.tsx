@@ -6,6 +6,7 @@ import {
   HistogramSeries,
   LineSeries,
   type IChartApi,
+  type ISeriesApi,
   type LogicalRange,
   type Time,
 } from 'lightweight-charts';
@@ -45,6 +46,34 @@ const SERIES_LABEL_OPTS = {
   priceLineVisible: false,
 } as const;
 
+const CHART_OPTS = {
+  layout: {
+    background: { type: ColorType.Solid, color: '#141a24' },
+    textColor: '#8b9bb4',
+  },
+  grid: {
+    vertLines: { color: '#2a354833' },
+    horzLines: { color: '#2a354833' },
+  },
+  rightPriceScale: { borderColor: '#2a3548' },
+  timeScale: { borderColor: '#2a3548', timeVisible: true },
+  crosshair: { mode: 1 },
+} as const;
+
+type ChartBundle = {
+  mainChart: IChartApi;
+  volChart: IChartApi;
+  macdChart: IChartApi;
+  candles: ISeriesApi<'Candlestick'>;
+  ma5: ISeriesApi<'Line'>;
+  ma20: ISeriesApi<'Line'>;
+  ma30: ISeriesApi<'Line'>;
+  volSeries: ISeriesApi<'Histogram'>;
+  macdHist: ISeriesApi<'Histogram'>;
+  difLine: ISeriesApi<'Line'>;
+  deaLine: ISeriesApi<'Line'>;
+};
+
 function pctVsCurrent(ref: number, current: number): number {
   if (!ref) return 0;
   return ((current - ref) / ref) * 100;
@@ -68,6 +97,134 @@ function syncCharts(charts: IChartApi[]) {
   };
 }
 
+function applyBarsToCharts(
+  bundle: ChartBundle,
+  bars: EnrichedBar[],
+  fitContent: boolean
+) {
+  bundle.candles.setData(
+    bars.map((b) => ({
+      time: toTime(b.date),
+      open: b.open,
+      high: b.high,
+      low: b.low,
+      close: b.close,
+    }))
+  );
+  bundle.ma5.setData(
+    bars
+      .filter((b) => b.ma5 != null)
+      .map((b) => ({ time: toTime(b.date), value: b.ma5! }))
+  );
+  bundle.ma20.setData(
+    bars
+      .filter((b) => b.ma20 != null)
+      .map((b) => ({ time: toTime(b.date), value: b.ma20! }))
+  );
+  bundle.ma30.setData(
+    bars
+      .filter((b) => b.ma30 != null)
+      .map((b) => ({ time: toTime(b.date), value: b.ma30! }))
+  );
+  bundle.volSeries.setData(
+    bars.map((b) => ({
+      time: toTime(b.date),
+      value: b.volume,
+      color:
+        b.close >= b.open ? 'rgba(248,113,113,0.5)' : 'rgba(52,211,153,0.5)',
+    }))
+  );
+  bundle.macdHist.setData(
+    bars
+      .filter((b) => b.macd)
+      .map((b) => ({
+        time: toTime(b.date),
+        value: b.macd!.hist,
+        color: b.macd!.hist >= 0 ? '#f8717188' : '#34d39988',
+      }))
+  );
+  bundle.difLine.setData(
+    bars
+      .filter((b) => b.macd)
+      .map((b) => ({ time: toTime(b.date), value: b.macd!.dif }))
+  );
+  bundle.deaLine.setData(
+    bars
+      .filter((b) => b.macd)
+      .map((b) => ({ time: toTime(b.date), value: b.macd!.dea }))
+  );
+  const charts = [bundle.mainChart, bundle.volChart, bundle.macdChart];
+  if (fitContent) {
+    charts.forEach((c) => c.timeScale().fitContent());
+  }
+}
+
+function createChartBundle(
+  mainEl: HTMLDivElement,
+  volEl: HTMLDivElement,
+  macdEl: HTMLDivElement
+): ChartBundle {
+  const mainChart = createChart(mainEl, { ...CHART_OPTS, height: 320 });
+  const volChart = createChart(volEl, { ...CHART_OPTS, height: 100 });
+  const macdChart = createChart(macdEl, { ...CHART_OPTS, height: 120 });
+
+  const candles = mainChart.addSeries(CandlestickSeries, {
+    upColor: '#f87171',
+    downColor: '#34d399',
+    borderUpColor: '#f87171',
+    borderDownColor: '#34d399',
+    wickUpColor: '#f87171',
+    wickDownColor: '#34d399',
+    ...SERIES_LABEL_OPTS,
+  });
+  const ma5 = mainChart.addSeries(LineSeries, {
+    color: MA_COLORS.ma5,
+    lineWidth: 1,
+    ...SERIES_LABEL_OPTS,
+  });
+  const ma20 = mainChart.addSeries(LineSeries, {
+    color: MA_COLORS.ma20,
+    lineWidth: 1,
+    ...SERIES_LABEL_OPTS,
+  });
+  const ma30 = mainChart.addSeries(LineSeries, {
+    color: MA_COLORS.ma30,
+    lineWidth: 1,
+    ...SERIES_LABEL_OPTS,
+  });
+  const volSeries = volChart.addSeries(HistogramSeries, {
+    priceFormat: { type: 'volume' },
+    priceScaleId: '',
+  });
+  const macdHist = macdChart.addSeries(HistogramSeries, {
+    priceFormat: { type: 'price', precision: 3, minMove: 0.001 },
+  });
+  const difLine = macdChart.addSeries(LineSeries, {
+    color: '#3d8bfd',
+    lineWidth: 1,
+    ...SERIES_LABEL_OPTS,
+  });
+  const deaLine = macdChart.addSeries(LineSeries, {
+    color: '#fb923c',
+    lineWidth: 1,
+    ...SERIES_LABEL_OPTS,
+  });
+
+  return {
+    mainChart,
+    volChart,
+    macdChart,
+    candles,
+    ma5,
+    ma20,
+    ma30,
+    volSeries,
+    macdHist,
+    difLine,
+    deaLine,
+  };
+}
+
 export function StockChartPanels({
   bars,
   period = 'day',
@@ -75,222 +232,143 @@ export function StockChartPanels({
 }: {
   bars: EnrichedBar[];
   period?: KlinePeriod;
-  /** 现价（实时报价）；未传则用最后一根 K 线收盘价 */
   currentPrice?: number;
 }) {
   const mainWrapRef = useRef<HTMLDivElement>(null);
   const mainRef = useRef<HTMLDivElement>(null);
   const volRef = useRef<HTMLDivElement>(null);
   const macdRef = useRef<HTMLDivElement>(null);
+  const bundleRef = useRef<ChartBundle | null>(null);
+  const barByTimeRef = useRef<Map<string, EnrichedBar>>(new Map());
+  const barsRef = useRef(bars);
+  barsRef.current = bars;
+  const shouldFitRef = useRef(true);
+  const lastPeriodRef = useRef(period);
+  const priceRef = useRef(0);
+  const crosshairRaf = useRef(0);
   const [crosshairHint, setCrosshairHint] = useState<CrosshairHint | null>(
     null
   );
+  const [wrapWidth, setWrapWidth] = useState(720);
 
   const latestClose = bars.length ? bars[bars.length - 1]!.close : 0;
   const refCurrent =
     currentPrice != null && currentPrice > 0 ? currentPrice : latestClose;
-  const priceRef = useRef(refCurrent);
 
   useEffect(() => {
     priceRef.current = refCurrent;
   }, [refCurrent]);
 
   useEffect(() => {
-    if (!mainRef.current || !volRef.current || !macdRef.current || !bars.length) {
-      return;
+    const el = mainWrapRef.current;
+    if (!el) return;
+    const update = () => setWrapWidth(el.clientWidth || 720);
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (!mainRef.current || !volRef.current || !macdRef.current) return;
+
+    const bundle = createChartBundle(
+      mainRef.current,
+      volRef.current,
+      macdRef.current
+    );
+    bundleRef.current = bundle;
+
+    if (barsRef.current.length) {
+      barByTimeRef.current = new Map(
+        barsRef.current.map((b) => [b.date.slice(0, 10), b])
+      );
+      applyBarsToCharts(bundle, barsRef.current, true);
+      shouldFitRef.current = false;
     }
 
-    const chartOpts = {
-      layout: {
-        background: { type: ColorType.Solid, color: '#141a24' },
-        textColor: '#8b9bb4',
-      },
-      grid: {
-        vertLines: { color: '#2a354833' },
-        horzLines: { color: '#2a354833' },
-      },
-      rightPriceScale: { borderColor: '#2a3548' },
-      timeScale: { borderColor: '#2a3548', timeVisible: true },
-      crosshair: { mode: 1 },
-    };
-
-    const mainChart = createChart(mainRef.current, {
-      ...chartOpts,
-      height: 320,
-    });
-    const volChart = createChart(volRef.current, {
-      ...chartOpts,
-      height: 100,
-    });
-    const macdChart = createChart(macdRef.current, {
-      ...chartOpts,
-      height: 120,
-    });
-
-    const candles = mainChart.addSeries(CandlestickSeries, {
-      upColor: '#f87171',
-      downColor: '#34d399',
-      borderUpColor: '#f87171',
-      borderDownColor: '#34d399',
-      wickUpColor: '#f87171',
-      wickDownColor: '#34d399',
-      ...SERIES_LABEL_OPTS,
-    });
-    candles.setData(
-      bars.map((b) => ({
-        time: toTime(b.date),
-        open: b.open,
-        high: b.high,
-        low: b.low,
-        close: b.close,
-      }))
-    );
-
-    const ma5 = mainChart.addSeries(LineSeries, {
-      color: MA_COLORS.ma5,
-      lineWidth: 1,
-      ...SERIES_LABEL_OPTS,
-    });
-    const ma20 = mainChart.addSeries(LineSeries, {
-      color: MA_COLORS.ma20,
-      lineWidth: 1,
-      ...SERIES_LABEL_OPTS,
-    });
-    const ma30 = mainChart.addSeries(LineSeries, {
-      color: MA_COLORS.ma30,
-      lineWidth: 1,
-      ...SERIES_LABEL_OPTS,
-    });
-    ma5.setData(
-      bars
-        .filter((b) => b.ma5 != null)
-        .map((b) => ({ time: toTime(b.date), value: b.ma5! }))
-    );
-    ma20.setData(
-      bars
-        .filter((b) => b.ma20 != null)
-        .map((b) => ({ time: toTime(b.date), value: b.ma20! }))
-    );
-    ma30.setData(
-      bars
-        .filter((b) => b.ma30 != null)
-        .map((b) => ({ time: toTime(b.date), value: b.ma30! }))
-    );
-
-    const volSeries = volChart.addSeries(HistogramSeries, {
-      priceFormat: { type: 'volume' },
-      priceScaleId: '',
-    });
-    volSeries.setData(
-      bars.map((b) => ({
-        time: toTime(b.date),
-        value: b.volume,
-        color:
-          b.close >= b.open ? 'rgba(248,113,113,0.5)' : 'rgba(52,211,153,0.5)',
-      }))
-    );
-
-    const macdHist = macdChart.addSeries(HistogramSeries, {
-      priceFormat: { type: 'price', precision: 3, minMove: 0.001 },
-    });
-    macdHist.setData(
-      bars
-        .filter((b) => b.macd)
-        .map((b) => ({
-          time: toTime(b.date),
-          value: b.macd!.hist,
-          color: b.macd!.hist >= 0 ? '#f8717188' : '#34d39988',
-        }))
-    );
-    const difLine = macdChart.addSeries(LineSeries, {
-      color: '#3d8bfd',
-      lineWidth: 1,
-      ...SERIES_LABEL_OPTS,
-    });
-    const deaLine = macdChart.addSeries(LineSeries, {
-      color: '#fb923c',
-      lineWidth: 1,
-      ...SERIES_LABEL_OPTS,
-    });
-    difLine.setData(
-      bars
-        .filter((b) => b.macd)
-        .map((b) => ({ time: toTime(b.date), value: b.macd!.dif }))
-    );
-    deaLine.setData(
-      bars
-        .filter((b) => b.macd)
-        .map((b) => ({ time: toTime(b.date), value: b.macd!.dea }))
-    );
-
-    const charts = [mainChart, volChart, macdChart];
+    const charts = [bundle.mainChart, bundle.volChart, bundle.macdChart];
     const unsync = syncCharts(charts);
-    charts.forEach((c) => c.timeScale().fitContent());
-
-    const barByTime = new Map(bars.map((b) => [b.date.slice(0, 10), b]));
 
     const onCrosshairMove = (param: {
       point?: { x: number; y: number };
       time?: Time;
     }) => {
-      const livePrice = priceRef.current;
-      if (!param.point || livePrice <= 0) {
-        setCrosshairHint(null);
-        return;
-      }
+      cancelAnimationFrame(crosshairRaf.current);
+      crosshairRaf.current = requestAnimationFrame(() => {
+        const livePrice = priceRef.current;
+        if (!param.point || livePrice <= 0) {
+          setCrosshairHint(null);
+          return;
+        }
 
-      const yPrice = candles.coordinateToPrice(param.point.y);
-      if (yPrice == null || !Number.isFinite(yPrice)) {
-        setCrosshairHint(null);
-        return;
-      }
+        const yPrice = bundle.candles.coordinateToPrice(param.point.y);
+        if (yPrice == null || !Number.isFinite(yPrice)) {
+          setCrosshairHint(null);
+          return;
+        }
 
-      let date: string | undefined;
-      let bar: EnrichedBar | undefined;
-      if (param.time) {
-        const t = String(param.time).slice(0, 10);
-        bar = barByTime.get(t);
-        date = bar?.date.slice(0, 10) ?? t;
-      }
+        let date: string | undefined;
+        let bar: EnrichedBar | undefined;
+        if (param.time) {
+          const t = String(param.time).slice(0, 10);
+          bar = barByTimeRef.current.get(t);
+          date = bar?.date.slice(0, 10) ?? t;
+        }
 
-      const changePct = pctVsCurrent(yPrice, livePrice);
-      setCrosshairHint({
-        x: param.point.x,
-        y: param.point.y,
-        refPrice: yPrice,
-        currentPrice: livePrice,
-        changePct,
-        date,
-        ma5: bar?.ma5,
-        ma20: bar?.ma20,
-        ma30: bar?.ma30,
-        open: bar?.open,
-        high: bar?.high,
-        low: bar?.low,
-        close: bar?.close,
+        setCrosshairHint({
+          x: param.point.x,
+          y: param.point.y,
+          refPrice: yPrice,
+          currentPrice: livePrice,
+          changePct: pctVsCurrent(yPrice, livePrice),
+          date,
+          ma5: bar?.ma5,
+          ma20: bar?.ma20,
+          ma30: bar?.ma30,
+          open: bar?.open,
+          high: bar?.high,
+          low: bar?.low,
+          close: bar?.close,
+        });
       });
     };
 
-    mainChart.subscribeCrosshairMove(onCrosshairMove);
+    bundle.mainChart.subscribeCrosshairMove(onCrosshairMove);
 
     const onResize = () => {
       const w = mainRef.current?.clientWidth ?? 600;
-      mainChart.applyOptions({ width: w });
-      volChart.applyOptions({ width: w });
-      macdChart.applyOptions({ width: w });
+      bundle.mainChart.applyOptions({ width: w });
+      bundle.volChart.applyOptions({ width: w });
+      bundle.macdChart.applyOptions({ width: w });
     };
     onResize();
     window.addEventListener('resize', onResize);
 
     return () => {
-      mainChart.unsubscribeCrosshairMove(onCrosshairMove);
+      cancelAnimationFrame(crosshairRaf.current);
+      bundle.mainChart.unsubscribeCrosshairMove(onCrosshairMove);
       unsync();
       window.removeEventListener('resize', onResize);
-      mainChart.remove();
-      volChart.remove();
-      macdChart.remove();
+      bundle.mainChart.remove();
+      bundle.volChart.remove();
+      bundle.macdChart.remove();
+      bundleRef.current = null;
       setCrosshairHint(null);
     };
+  }, []);
+
+  useEffect(() => {
+    const bundle = bundleRef.current;
+    if (!bundle || !bars.length) return;
+    if (lastPeriodRef.current !== period) {
+      lastPeriodRef.current = period;
+      shouldFitRef.current = true;
+    }
+    barByTimeRef.current = new Map(bars.map((b) => [b.date.slice(0, 10), b]));
+    const fit = shouldFitRef.current;
+    applyBarsToCharts(bundle, bars, fit);
+    if (fit) shouldFitRef.current = false;
   }, [bars, period]);
 
   const hintCls =
@@ -359,24 +437,21 @@ export function StockChartPanels({
               style={{
                 left: Math.min(
                   Math.max(crosshairHint.x + 14, 8),
-                  (mainWrapRef.current?.clientWidth ?? 720) - 168
+                  wrapWidth - 168
                 ),
-                top: Math.min(
-                  Math.max(crosshairHint.y + 14, 8),
-                  280
-                ),
+                top: Math.min(Math.max(crosshairHint.y + 14, 8), 280),
               }}
             >
-            <span className="hint-price">
-              光标 {crosshairHint.refPrice.toFixed(2)}
-            </span>
-            <span className="hint-vs">
-              现价 {crosshairHint.currentPrice.toFixed(2)}
-            </span>
-            <strong className="hint-pct">
-              较光标 {formatChangePercent(crosshairHint.changePct)}
-            </strong>
-          </div>
+              <span className="hint-price">
+                光标 {crosshairHint.refPrice.toFixed(2)}
+              </span>
+              <span className="hint-vs">
+                现价 {crosshairHint.currentPrice.toFixed(2)}
+              </span>
+              <strong className="hint-pct">
+                较光标 {formatChangePercent(crosshairHint.changePct)}
+              </strong>
+            </div>
           </>
         )}
       </div>

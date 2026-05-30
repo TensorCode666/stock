@@ -66,4 +66,14 @@ export default defineConfig({
   plugins: [react()],
   server: { proxy: emProxy },
   preview: { proxy: emProxy },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('lightweight-charts')) return 'lightweight-charts';
+          if (id.includes('node_modules/react-router')) return 'router';
+        },
+      },
+    },
+  },
 })

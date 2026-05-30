@@ -17,19 +17,22 @@ import {
   type MarketBreadth,
   type StockQuote,
 } from '../lib/market-api';
+import { quotesStore } from '../lib/quotes-store';
 import { normalizeSymbol, symbolsKey } from '../lib/symbols';
+
+export { useQuote, useQuotesRevision } from '../lib/quotes-store';
 
 type RefreshOptions = { silent?: boolean };
 
 type MarketDataContextValue = {
   indices: IndexQuote[];
   breadth: MarketBreadth | null;
-  quotes: Map<string, StockQuote>;
   loading: boolean;
   refreshing: boolean;
   error: string | null;
   lastUpdated: Date | null;
   refresh: (options?: RefreshOptions) => Promise<void>;
+  /** @deprecated 优先使用 useQuote(symbol) 以减少无关重渲染 */
   getQuote: (symbol: string) => StockQuote | undefined;
 };
 
@@ -37,16 +40,42 @@ const MarketDataContext = createContext<MarketDataContextValue | null>(null);
 
 const REFRESH_MS = 30_000;
 
+function indicesChanged(prev: IndexQuote[], next: IndexQuote[]): boolean {
+  if (prev.length !== next.length) return true;
+  for (let i = 0; i < next.length; i++) {
+    const a = prev[i];
+    const b = next[i];
+    if (!a || !b || a.code !== b.code) return true;
+    if (a.price !== b.price || a.changePercent !== b.changePercent) return true;
+  }
+  return false;
+}
+
+function breadthChanged(
+  prev: MarketBreadth | null,
+  next: MarketBreadth | null
+): boolean {
+  if (prev === next) return false;
+  if (!prev || !next) return true;
+  return (
+    prev.up !== next.up ||
+    prev.down !== next.down ||
+    prev.flat !== next.flat ||
+    prev.total !== next.total
+  );
+}
+
 export function MarketDataProvider({ children }: { children: ReactNode }) {
   const { data } = useApp();
   const [indices, setIndices] = useState<IndexQuote[]>([]);
   const [breadth, setBreadth] = useState<MarketBreadth | null>(null);
-  const [quotes, setQuotes] = useState<Map<string, StockQuote>>(new Map());
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const initialDone = useRef(false);
+  const indicesRef = useRef<IndexQuote[]>([]);
+  const breadthRef = useRef<MarketBreadth | null>(null);
 
   const symbolsKeyValue = useMemo(() => {
     const set = new Set<string>();
@@ -68,8 +97,10 @@ export function MarketDataProvider({ children }: { children: ReactNode }) {
         ? symbolsKeyValue.split(',').filter(Boolean)
         : [];
       const silent = options?.silent ?? initialDone.current;
-      if (!silent) setLoading(true);
-      setRefreshing(true);
+      if (!silent) {
+        setLoading(true);
+        setRefreshing(true);
+      }
       setError(null);
       const errors: string[] = [];
       const [idx, br, qMap] = await Promise.all([
@@ -83,18 +114,31 @@ export function MarketDataProvider({ children }: { children: ReactNode }) {
           return new Map<string, StockQuote>();
         }),
       ]);
-      setIndices(idx);
-      setBreadth(br);
-      setQuotes(qMap);
-      setLastUpdated(new Date());
+      const idxChanged = indicesChanged(indicesRef.current, idx);
+      const brChanged = breadthChanged(breadthRef.current, br);
+      const qChanged = quotesStore.setQuotes(qMap);
+
+      if (idxChanged) {
+        indicesRef.current = idx;
+        setIndices(idx);
+      }
+      if (brChanged) {
+        breadthRef.current = br;
+        setBreadth(br);
+      }
+      if (idxChanged || brChanged || qChanged) {
+        setLastUpdated(new Date());
+      }
       if (errors.length && idx.length === 0 && qMap.size === 0) {
         setError(errors.join('；'));
       } else if (errors.length) {
         setError(`部分行情不可用（已尝试腾讯备用源）：${errors[0]}`);
       }
       initialDone.current = true;
-      setLoading(false);
-      setRefreshing(false);
+      if (!silent) {
+        setLoading(false);
+        setRefreshing(false);
+      }
     },
     [symbolsKeyValue]
   );
@@ -122,15 +166,14 @@ export function MarketDataProvider({ children }: { children: ReactNode }) {
   }, [refresh]);
 
   const getQuote = useCallback(
-    (symbol: string) => quotes.get(normalizeSymbol(symbol)),
-    [quotes]
+    (symbol: string) => quotesStore.getQuote(symbol),
+    []
   );
 
   const value = useMemo(
     () => ({
       indices,
       breadth,
-      quotes,
       loading,
       refreshing,
       error,
@@ -141,7 +184,6 @@ export function MarketDataProvider({ children }: { children: ReactNode }) {
     [
       indices,
       breadth,
-      quotes,
       loading,
       refreshing,
       error,

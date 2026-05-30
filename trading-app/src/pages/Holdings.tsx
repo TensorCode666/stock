@@ -1,8 +1,12 @@
-import { useEffect, useMemo, useState } from 'react';
+import { memo, useEffect, useMemo, useState } from 'react';
 import { HoldingPnl, QuoteCell } from '../components/QuoteCell';
 import { StockSearch } from '../components/StockSearch';
 import { useApp } from '../context/AppContext';
-import { useMarketData } from '../context/MarketDataContext';
+import {
+  useMarketData,
+  useQuote,
+  useQuotesRevision,
+} from '../context/MarketDataContext';
 import { envScoreTotal, TRADE_MODE_LABELS } from '../lib/calculations';
 import {
   ADVICE_TAG_CLASS,
@@ -38,7 +42,7 @@ function emptyHolding(): Holding {
   };
 }
 
-function AdviceCard({
+const AdviceCard = memo(function AdviceCard({
   holding,
   advice,
   loading,
@@ -79,11 +83,73 @@ function AdviceCard({
       )}
     </div>
   );
-}
+});
+
+const HoldingTableRow = memo(function HoldingTableRow({
+  holding: h,
+  advice,
+  adviceLoading,
+  onEdit,
+  onRemove,
+}: {
+  holding: Holding;
+  advice: HoldingAdvice;
+  adviceLoading: boolean;
+  onEdit: (h: Holding) => void;
+  onRemove: (id: string) => void;
+}) {
+  const quote = useQuote(h.symbol);
+  return (
+    <tr>
+      <td>
+        {h.symbol} {h.name}
+      </td>
+      <td>{TRADE_MODE_LABELS[h.mode]}</td>
+      <td>
+        {adviceLoading ? (
+          <span className="muted small">—</span>
+        ) : (
+          <span
+            className={`tag ${ADVICE_TAG_CLASS[advice.action]}`}
+            title={advice.reasons.join('；')}
+          >
+            {advice.label}
+          </span>
+        )}
+      </td>
+      <td>
+        {h.buyDate} @ {h.buyPrice}
+      </td>
+      <td>{h.shares}</td>
+      <td>
+        <QuoteCell quote={quote} />
+      </td>
+      <td>
+        <HoldingPnl quote={quote} buyPrice={h.buyPrice} shares={h.shares} />
+      </td>
+      <td>{h.stopLoss}</td>
+      <td>{h.targetPrice}</td>
+      <td>¥{(h.buyPrice * h.shares).toFixed(0)}</td>
+      <td className="actions">
+        <button type="button" className="btn sm" onClick={() => onEdit(h)}>
+          编辑
+        </button>
+        <button
+          type="button"
+          className="btn sm danger"
+          onClick={() => onRemove(h.id)}
+        >
+          删除
+        </button>
+      </td>
+    </tr>
+  );
+});
 
 export function Holdings() {
   const { data, setData } = useApp();
-  const { getQuote, quotes, refresh } = useMarketData();
+  const { getQuote } = useMarketData();
+  const quotesRevision = useQuotesRevision();
   const [form, setForm] = useState<Holding | null>(null);
   const [klinesMap, setKlinesMap] = useState<Map<string, KlineBar[]>>(
     new Map()
@@ -123,18 +189,6 @@ export function Holdings() {
     };
   }, [holdingSymbolsKey]);
 
-  const quotesKey = useMemo(() => {
-    return data.holdings
-      .map((h) => {
-        const sym = normalizeSymbol(h.symbol);
-        const q = quotes.get(sym);
-        return q
-          ? `${sym}:${q.price.toFixed(2)}:${q.changePercent.toFixed(2)}`
-          : sym;
-      })
-      .join('|');
-  }, [data.holdings, quotes]);
-
   const adviceById = useMemo(() => {
     const map = new Map<string, HoldingAdvice>();
     for (const h of data.holdings) {
@@ -154,7 +208,7 @@ export function Holdings() {
       );
     }
     return map;
-  }, [data.holdings, getQuote, klinesMap, todayEnv, quotesKey]);
+  }, [data.holdings, getQuote, klinesMap, todayEnv, quotesRevision]);
 
   const save = () => {
     if (!form?.symbol.trim()) return;
@@ -218,7 +272,6 @@ export function Holdings() {
                 symbol: r.symbol,
                 name: r.name,
               });
-              void refresh();
             }}
           />
           <div className="form-grid">
@@ -418,62 +471,17 @@ export function Holdings() {
             <tbody>
               {data.holdings.map((h) => {
                 const sym = normalizeSymbol(h.symbol);
-                const advice =
-                  adviceById.get(h.id) ?? DEFAULT_HOLDING_ADVICE;
-                const adviceLoading =
-                  klinesLoading && !klinesMap.get(sym)?.length;
                 return (
-                  <tr key={h.id}>
-                    <td>
-                      {h.symbol} {h.name}
-                    </td>
-                    <td>{TRADE_MODE_LABELS[h.mode]}</td>
-                    <td>
-                      {adviceLoading ? (
-                        <span className="muted small">—</span>
-                      ) : (
-                        <span
-                          className={`tag ${ADVICE_TAG_CLASS[advice.action]}`}
-                          title={advice.reasons.join('；')}
-                        >
-                          {advice.label}
-                        </span>
-                      )}
-                    </td>
-                    <td>
-                      {h.buyDate} @ {h.buyPrice}
-                    </td>
-                    <td>{h.shares}</td>
-                    <td>
-                      <QuoteCell quote={getQuote(h.symbol)} />
-                    </td>
-                    <td>
-                      <HoldingPnl
-                        quote={getQuote(h.symbol)}
-                        buyPrice={h.buyPrice}
-                        shares={h.shares}
-                      />
-                    </td>
-                    <td>{h.stopLoss}</td>
-                    <td>{h.targetPrice}</td>
-                    <td>¥{(h.buyPrice * h.shares).toFixed(0)}</td>
-                    <td className="actions">
-                      <button
-                        type="button"
-                        className="btn sm"
-                        onClick={() => setForm(h)}
-                      >
-                        编辑
-                      </button>
-                      <button
-                        type="button"
-                        className="btn sm danger"
-                        onClick={() => remove(h.id)}
-                      >
-                        删除
-                      </button>
-                    </td>
-                  </tr>
+                  <HoldingTableRow
+                    key={h.id}
+                    holding={h}
+                    advice={adviceById.get(h.id) ?? DEFAULT_HOLDING_ADVICE}
+                    adviceLoading={
+                      klinesLoading && !klinesMap.get(sym)?.length
+                    }
+                    onEdit={setForm}
+                    onRemove={remove}
+                  />
                 );
               })}
             </tbody>

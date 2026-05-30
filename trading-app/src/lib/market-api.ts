@@ -246,23 +246,38 @@ export async function fetchStockQuotes(
   const codes = [...new Set(symbols.map(normalizeSymbol).filter(Boolean))];
   if (codes.length === 0) return map;
 
-  let emFailed = false;
   const chunkSize = 40;
+  const chunks: string[][] = [];
   for (let i = 0; i < codes.length; i += chunkSize) {
-    const chunk = codes.slice(i, i + chunkSize);
-    const secids = chunk.map(symbolToSecId).filter(Boolean).join(',');
-    const fields =
-      'f2,f3,f4,f12,f14,f15,f16,f17,f18,f20,f21,f47,f48,f57,f58,f60,f169,f170';
-    const url = `${EM}/api/qt/ulist.np/get?fltt=2&fields=${fields}&secids=${secids}`;
-    const json = await fetchJsonSafe<EmListResp>(url);
-    if (!json) {
-      emFailed = true;
-      continue;
-    }
-    for (const row of json.data?.diff ?? []) {
-      const symbol = String(row.f12 ?? '');
-      if (!symbol) continue;
-      map.set(symbol, rowToQuote(symbol, symbolToSecId(symbol), row));
+    chunks.push(codes.slice(i, i + chunkSize));
+  }
+
+  const fields =
+    'f2,f3,f4,f12,f14,f15,f16,f17,f18,f20,f21,f47,f48,f57,f58,f60,f169,f170';
+
+  let emFailed = false;
+  const chunkResults = await Promise.all(
+    chunks.map(async (chunk) => {
+      const secids = chunk.map(symbolToSecId).filter(Boolean).join(',');
+      const url = `${EM}/api/qt/ulist.np/get?fltt=2&fields=${fields}&secids=${secids}`;
+      const json = await fetchJsonSafe<EmListResp>(url);
+      if (!json) {
+        emFailed = true;
+        return [] as StockQuote[];
+      }
+      const rows: StockQuote[] = [];
+      for (const row of json.data?.diff ?? []) {
+        const symbol = String(row.f12 ?? '');
+        if (!symbol) continue;
+        rows.push(rowToQuote(symbol, symbolToSecId(symbol), row));
+      }
+      return rows;
+    })
+  );
+
+  for (const rows of chunkResults) {
+    for (const q of rows) {
+      map.set(q.symbol, q);
     }
   }
 
@@ -432,22 +447,44 @@ async function searchStocksSmartbox(keyword: string): Promise<StockSearchResult[
 }
 
 /** 搜索 A 股 / ETF（JSONP + 腾讯 smartbox 双通道） */
+const SEARCH_CACHE_TTL_MS = 60_000;
+const searchCache = new Map<
+  string,
+  { at: number; rows: StockSearchResult[] }
+>();
+
 export async function searchStocks(
   keyword: string
 ): Promise<StockSearchResult[]> {
   const q = keyword.trim();
   if (!q) return [];
 
+  const cacheHit = searchCache.get(q);
+  if (cacheHit && Date.now() - cacheHit.at < SEARCH_CACHE_TTL_MS) {
+    return cacheHit.rows;
+  }
+
+  let rows: StockSearchResult[] = [];
+
   // 6 位代码优先走 smartbox（快且稳定）
   if (/^\d{6}$/.test(normalizeSymbol(q))) {
     const smart = await searchStocksSmartbox(q);
-    if (smart.length) return smart;
+    if (smart.length) rows = smart;
   }
 
-  const eastmoney = await searchStocksEastmoney(q);
-  if (eastmoney.length) return eastmoney;
+  if (!rows.length) {
+    const eastmoney = await searchStocksEastmoney(q);
+    if (eastmoney.length) rows = eastmoney;
+  }
 
-  return searchStocksSmartbox(q);
+  if (!rows.length) {
+    rows = await searchStocksSmartbox(q);
+  }
+
+  if (rows.length) {
+    searchCache.set(q, { at: Date.now(), rows });
+  }
+  return rows;
 }
 
 export function formatChangePercent(n: number): string {

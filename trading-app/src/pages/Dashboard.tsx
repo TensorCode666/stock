@@ -1,8 +1,8 @@
-import { useRef } from 'react';
+import { memo, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { QuoteCell } from '../components/QuoteCell';
 import { useApp } from '../context/AppContext';
-import { useMarketData } from '../context/MarketDataContext';
+import { useQuote } from '../context/MarketDataContext';
 import {
   envScoreLabel,
   envScoreTotal,
@@ -13,11 +13,47 @@ import {
   importAppDataFromFile,
 } from '../lib/data-backup';
 import { todayStr } from '../lib/storage';
+import type { WatchlistItem } from '../types';
+
+const DashboardWatchRow = memo(function DashboardWatchRow({
+  w,
+}: {
+  w: WatchlistItem;
+}) {
+  const quote = useQuote(w.symbol);
+  return (
+    <tr>
+      <td>
+        <Link
+          to={`/stock/${w.symbol}`}
+          state={{ name: w.name, watchlistId: w.id }}
+          className="stock-link"
+        >
+          {w.symbol}
+        </Link>
+      </td>
+      <td>
+        <Link
+          to={`/stock/${w.symbol}`}
+          state={{ name: w.name, watchlistId: w.id }}
+          className="stock-link"
+        >
+          {w.name}
+        </Link>
+      </td>
+      <td>{w.mode}</td>
+      <td>{stockScoreTotal(w)}/20</td>
+      <td>
+        <QuoteCell quote={quote} />
+      </td>
+      <td>{w.status === 'ready' ? '待买点' : '观察'}</td>
+    </tr>
+  );
+});
 
 export function Dashboard() {
   const { data, setData } = useApp();
   const importRef = useRef<HTMLInputElement>(null);
-  const { getQuote } = useMarketData();
   const today = todayStr();
   const todayEnv = [...data.envScores]
     .reverse()
@@ -103,32 +139,7 @@ export function Dashboard() {
             </thead>
             <tbody>
               {activeWatch.slice(0, 8).map((w) => (
-                <tr key={w.id}>
-                  <td>
-                    <Link
-                      to={`/stock/${w.symbol}`}
-                      state={{ name: w.name, watchlistId: w.id }}
-                      className="stock-link"
-                    >
-                      {w.symbol}
-                    </Link>
-                  </td>
-                  <td>
-                    <Link
-                      to={`/stock/${w.symbol}`}
-                      state={{ name: w.name, watchlistId: w.id }}
-                      className="stock-link"
-                    >
-                      {w.name}
-                    </Link>
-                  </td>
-                  <td>{w.mode}</td>
-                  <td>{stockScoreTotal(w)}/20</td>
-                  <td>
-                    <QuoteCell quote={getQuote(w.symbol)} />
-                  </td>
-                  <td>{w.status === 'ready' ? '待买点' : '观察'}</td>
-                </tr>
+                <DashboardWatchRow key={w.id} w={w} />
               ))}
             </tbody>
           </table>

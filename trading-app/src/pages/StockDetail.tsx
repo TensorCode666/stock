@@ -1,16 +1,16 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
-import { StockChartPanels } from '../components/StockChartPanels';
+import { LazyStockChartPanels } from '../components/LazyStockChartPanels';
 import { StockQuoteHero } from '../components/StockQuoteHero';
 import { useApp } from '../context/AppContext';
-import { useMarketData } from '../context/MarketDataContext';
+import { useQuote } from '../context/MarketDataContext';
 import {
   stockScoreLabel,
   stockScoreTotal,
   TRADE_MODE_LABELS,
 } from '../lib/calculations';
+import { fetchStockChartDataCached } from '../lib/kline-cache';
 import {
-  fetchStockChartData,
   KLINE_PERIOD_LABELS,
   type EnrichedBar,
   type KlinePeriod,
@@ -28,7 +28,6 @@ export function StockDetail() {
   const location = useLocation();
   const state = (location.state ?? {}) as LocationState;
   const { data } = useApp();
-  const { getQuote } = useMarketData();
 
   const symbol = normalizeSymbol(symbolParam ?? '');
   const watchItem = useMemo(
@@ -44,9 +43,9 @@ export function StockDetail() {
   const displayName = watchItem?.name || state.name || symbol;
   const [period, setPeriod] = useState<KlinePeriod>('day');
   const [bars, setBars] = useState<EnrichedBar[]>([]);
-  const [quote, setQuote] = useState<StockQuote | undefined>(() =>
-    symbol ? getQuote(symbol) : undefined
-  );
+  const storeQuote = useQuote(symbol);
+  const [fallbackQuote, setFallbackQuote] = useState<StockQuote | undefined>();
+  const quote = storeQuote ?? fallbackQuote;
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -57,7 +56,7 @@ export function StockDetail() {
     setError(null);
 
     void (async () => {
-      const chart = await fetchStockChartData(symbol, period);
+      const chart = await fetchStockChartDataCached(symbol, period);
       if (cancelled) return;
       if (!chart?.bars.length) {
         setError(
@@ -77,19 +76,18 @@ export function StockDetail() {
   }, [symbol, period]);
 
   useEffect(() => {
-    if (!symbol) return;
-    void (async () => {
-      const q = getQuote(symbol)
-        ? getQuote(symbol)!
-        : await fetchStockQuote(symbol);
-      if (q) setQuote(q);
-    })();
-  }, [symbol, getQuote]);
-
-  useEffect(() => {
-    const q = getQuote(symbol);
-    if (q) setQuote(q);
-  }, [getQuote, symbol]);
+    if (!symbol || storeQuote) {
+      setFallbackQuote(undefined);
+      return;
+    }
+    let cancelled = false;
+    void fetchStockQuote(symbol).then((q) => {
+      if (!cancelled && q) setFallbackQuote(q);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [symbol, storeQuote]);
 
   if (!symbol) {
     return (
@@ -166,7 +164,7 @@ export function StockDetail() {
       {loading && <p className="muted">图表加载中…</p>}
 
       {!loading && bars.length > 0 && (
-        <StockChartPanels
+        <LazyStockChartPanels
           bars={bars}
           period={period}
           currentPrice={quote?.price}
