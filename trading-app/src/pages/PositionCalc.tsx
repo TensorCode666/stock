@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { useApp } from '../context/AppContext';
+import { useAppActions, useAppSlice } from '../context/AppContext';
 import {
   envScoreLabel,
   envScoreTotal,
@@ -9,9 +9,10 @@ import {
 import { todayStr } from '../lib/storage';
 
 export function PositionCalc() {
-  const { data, update } = useApp();
-  const { settings } = data;
-  const todayEnv = data.envScores.find((e) => e.date === todayStr());
+  const { update } = useAppActions();
+  const settings = useAppSlice('settings');
+  const envScores = useAppSlice('envScores');
+  const todayEnv = envScores.find((e) => e.date === todayStr());
   const envTotal = todayEnv ? envScoreTotal(todayEnv) : null;
   const envInfo = envTotal !== null ? envScoreLabel(envTotal) : null;
 

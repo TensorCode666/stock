@@ -1,10 +1,10 @@
 import { Link } from 'react-router-dom';
 import { FavoriteRow } from '../components/FavoriteRow';
-import { useApp } from '../context/AppContext';
+import { useAppActions, useAppSlice } from '../context/AppContext';
 
 export function Favorites() {
-  const { data, setData } = useApp();
-  const list = data.favorites;
+  const { setData } = useAppActions();
+  const list = useAppSlice('favorites');
 
   const remove = (id: string) => {
     setData((prev) => ({

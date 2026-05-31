@@ -118,22 +118,28 @@ async function fetchTencentQuotes(
   if (ids.length === 0) return map;
 
   const chunkSize = 50;
+  const chunks: string[][] = [];
   for (let i = 0; i < ids.length; i += chunkSize) {
-    const chunk = ids.slice(i, i + chunkSize);
-    try {
-      const res = await fetch(`${QT}/q=${chunk.join(',')}`, {
-        signal: AbortSignal.timeout(12_000),
-      });
-      if (!res.ok) continue;
-      const text = await res.text();
-      for (const line of text.split(';')) {
-        const q = parseTencentLine(line.trim());
-        if (q) map.set(q.symbol, q);
-      }
-    } catch {
-      /* try next chunk */
-    }
+    chunks.push(ids.slice(i, i + chunkSize));
   }
+
+  await Promise.all(
+    chunks.map(async (chunk) => {
+      try {
+        const res = await fetch(`${QT}/q=${chunk.join(',')}`, {
+          signal: AbortSignal.timeout(12_000),
+        });
+        if (!res.ok) return;
+        const text = await res.text();
+        for (const line of text.split(';')) {
+          const q = parseTencentLine(line.trim());
+          if (q) map.set(q.symbol, q);
+        }
+      } catch {
+        /* try next chunk */
+      }
+    })
+  );
   return map;
 }
 

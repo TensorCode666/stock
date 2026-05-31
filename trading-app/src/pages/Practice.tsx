@@ -2,7 +2,7 @@ import { useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { LazyStockChartPanels } from '../components/LazyStockChartPanels';
 import { StockSearch } from '../components/StockSearch';
-import { useApp } from '../context/AppContext';
+import { useAppActions, useAppSlice } from '../context/AppContext';
 import {
   stockScoreLabel,
   TRADE_MODE_LABELS,
@@ -39,7 +39,8 @@ const STATUS_LABELS = {
 } as const;
 
 export function Practice() {
-  const { data, setData } = useApp();
+  const { setData } = useAppActions();
+  const practiceAttempts = useAppSlice('practiceAttempts');
   const contentRef = useRef<HTMLElement>(null);
 
   const [phase, setPhase] = useState<Phase>('setup');
@@ -64,10 +65,10 @@ export function Practice() {
 
   const history = useMemo(
     () =>
-      [...(data.practiceAttempts ?? [])].sort(
+      [...(practiceAttempts ?? [])].sort(
         (a, b) => b.createdAt.localeCompare(a.createdAt)
       ),
-    [data.practiceAttempts]
+    [practiceAttempts]
   );
 
   const effectiveSymbol = symbol || normalizeSymbol(manualCode);

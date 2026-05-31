@@ -1,12 +1,9 @@
 import { memo, useEffect, useMemo, useState } from 'react';
 import { HoldingPnl, QuoteCell } from '../components/QuoteCell';
 import { StockSearch } from '../components/StockSearch';
-import { useApp } from '../context/AppContext';
-import {
-  useMarketData,
-  useQuote,
-  useQuotesRevision,
-} from '../context/MarketDataContext';
+import { useAppActions, useAppSlice } from '../context/AppContext';
+import { useQuote, useQuotesRevision } from '../context/MarketDataContext';
+import { quotesStore } from '../lib/quotes-store';
 import { envScoreTotal, TRADE_MODE_LABELS } from '../lib/calculations';
 import {
   ADVICE_TAG_CLASS,
@@ -147,8 +144,9 @@ const HoldingTableRow = memo(function HoldingTableRow({
 });
 
 export function Holdings() {
-  const { data, setData } = useApp();
-  const { getQuote } = useMarketData();
+  const { setData } = useAppActions();
+  const holdings = useAppSlice('holdings');
+  const envScores = useAppSlice('envScores');
   const quotesRevision = useQuotesRevision();
   const [form, setForm] = useState<Holding | null>(null);
   const [klinesMap, setKlinesMap] = useState<Map<string, KlineBar[]>>(
@@ -156,10 +154,10 @@ export function Holdings() {
   );
   const [klinesLoading, setKlinesLoading] = useState(false);
 
-  const todayEnv = data.envScores.find((e) => e.date === todayStr());
+  const todayEnv = envScores.find((e) => e.date === todayStr());
 
   const holdingSymbolsKey = symbolsKey(
-    data.holdings.map((h) => normalizeSymbol(h.symbol)).filter(Boolean)
+    holdings.map((h) => normalizeSymbol(h.symbol)).filter(Boolean)
   );
 
   useEffect(() => {
@@ -191,7 +189,7 @@ export function Holdings() {
 
   const adviceById = useMemo(() => {
     const map = new Map<string, HoldingAdvice>();
-    for (const h of data.holdings) {
+    for (const h of holdings) {
       const sym = normalizeSymbol(h.symbol);
       const bars = klinesMap.get(sym);
       const adviceReady = Boolean(bars?.length);
@@ -200,7 +198,7 @@ export function Holdings() {
         adviceReady
           ? evaluateHoldingAdvice({
               holding: h,
-              quote: getQuote(sym),
+              quote: quotesStore.getQuote(sym),
               bars,
               envScore: todayEnv ?? null,
             })
@@ -208,7 +206,7 @@ export function Holdings() {
       );
     }
     return map;
-  }, [data.holdings, getQuote, klinesMap, todayEnv, quotesRevision]);
+  }, [holdings, klinesMap, todayEnv, quotesRevision]);
 
   const save = () => {
     if (!form?.symbol.trim()) return;
@@ -228,10 +226,10 @@ export function Holdings() {
     const payload = { ...form, symbol: sym };
     setData((prev) => {
       const exists = prev.holdings.some((h) => h.id === form.id);
-      const holdings = exists
+      const nextHoldings = exists
         ? prev.holdings.map((h) => (h.id === form.id ? payload : h))
         : [...prev.holdings, payload];
-      return { ...prev, holdings };
+      return { ...prev, holdings: nextHoldings };
     });
     setForm(null);
   };
@@ -415,7 +413,7 @@ export function Holdings() {
         </div>
       </div>
 
-      {data.holdings.length > 0 && (
+      {holdings.length > 0 && (
         <div className="card section">
           <h3>
             规则建议
@@ -429,7 +427,7 @@ export function Holdings() {
               : ' 今日尚未录入环境评分。'}
           </p>
           <div className="advice-grid">
-            {data.holdings.map((h) => {
+            {holdings.map((h) => {
               const sym = normalizeSymbol(h.symbol);
               const advice =
                 adviceById.get(h.id) ?? DEFAULT_HOLDING_ADVICE;
@@ -449,7 +447,7 @@ export function Holdings() {
       )}
 
       <div className="card section">
-        {data.holdings.length === 0 ? (
+        {holdings.length === 0 ? (
           <p className="muted">暂无持仓记录</p>
         ) : (
           <table className="table">
@@ -469,7 +467,7 @@ export function Holdings() {
               </tr>
             </thead>
             <tbody>
-              {data.holdings.map((h) => {
+              {holdings.map((h) => {
                 const sym = normalizeSymbol(h.symbol);
                 return (
                   <HoldingTableRow

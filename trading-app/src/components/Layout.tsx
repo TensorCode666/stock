@@ -1,6 +1,13 @@
+import { memo } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 import { MarketBreadthBar, MarketIndices } from './MarketIndices';
-import { useMarketData } from '../context/MarketDataContext';
+import {
+  useMarketBreadth,
+  useMarketIndices,
+  useMarketRefresh,
+  useMarketStatus,
+} from '../context/MarketDataContext';
+import { prefetchRoute } from '../lib/route-prefetch';
 
 const navItems = [
   { to: '/', label: '总览', end: true },
@@ -16,9 +23,10 @@ const navItems = [
   { to: '/rules', label: '规则库' },
 ];
 
-function MarketBar() {
-  const { indices, breadth, loading, refreshing, refresh, lastUpdated, error } =
-    useMarketData();
+const MarketIndicesBar = memo(function MarketIndicesBar() {
+  const indices = useMarketIndices();
+  const { loading, refreshing, error, lastUpdated } = useMarketStatus();
+  const refresh = useMarketRefresh();
   return (
     <>
       {error && (
@@ -33,18 +41,23 @@ function MarketBar() {
         onRefresh={() => void refresh()}
         lastUpdated={lastUpdated}
       />
-      {breadth && (
-        <MarketBreadthBar
-          up={breadth.up}
-          down={breadth.down}
-          flat={breadth.flat}
-          scope={breadth.scope}
-          total={breadth.total}
-        />
-      )}
     </>
   );
-}
+});
+
+const MarketBreadthSlot = memo(function MarketBreadthSlot() {
+  const breadth = useMarketBreadth();
+  if (!breadth) return null;
+  return (
+    <MarketBreadthBar
+      up={breadth.up}
+      down={breadth.down}
+      flat={breadth.flat}
+      scope={breadth.scope}
+      total={breadth.total}
+    />
+  );
+});
 
 export function Layout() {
   return (
@@ -63,6 +76,8 @@ export function Layout() {
               key={item.to}
               to={item.to}
               end={item.end}
+              onMouseEnter={() => prefetchRoute(item.to)}
+              onFocus={() => prefetchRoute(item.to)}
               className={({ isActive }) =>
                 isActive ? 'nav-link active' : 'nav-link'
               }
@@ -78,7 +93,8 @@ export function Layout() {
         </footer>
       </aside>
       <main className="main">
-        <MarketBar />
+        <MarketIndicesBar />
+        <MarketBreadthSlot />
         <Outlet />
       </main>
     </div>

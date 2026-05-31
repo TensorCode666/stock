@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
+import { memo, useEffect, useRef, useState } from 'react';
 import { searchStocks, type StockSearchResult } from '../lib/market-api';
 
-export function StockSearch({
+export const StockSearch = memo(function StockSearch({
   onSelect,
   query: controlledQuery,
   onQueryChange,
@@ -18,6 +18,7 @@ export function StockSearch({
   const setQ = onQueryChange ?? setInternalQuery;
   const [results, setResults] = useState<StockSearchResult[]>([]);
   const [loading, setLoading] = useState(false);
+  const requestSeq = useRef(0);
 
   useEffect(() => {
     const trimmed = q.trim();
@@ -28,16 +29,17 @@ export function StockSearch({
     }
     let cancelled = false;
     const t = setTimeout(() => {
+      const requestId = ++requestSeq.current;
       setLoading(true);
       searchStocks(trimmed)
         .then((rows) => {
-          if (!cancelled) setResults(rows);
+          if (!cancelled && requestId === requestSeq.current) setResults(rows);
         })
         .catch(() => {
-          if (!cancelled) setResults([]);
+          if (!cancelled && requestId === requestSeq.current) setResults([]);
         })
         .finally(() => {
-          if (!cancelled) setLoading(false);
+          if (!cancelled && requestId === requestSeq.current) setLoading(false);
         });
     }, 300);
     return () => {
@@ -77,4 +79,4 @@ export function StockSearch({
       )}
     </div>
   );
-}
+});

@@ -6,15 +6,27 @@ import {
   useMemo,
   useRef,
   useState,
+  type Dispatch,
   type ReactNode,
+  type SetStateAction,
 } from 'react';
 import type { AppData } from '../types';
+import { appStore } from '../lib/app-store';
 import { loadData, saveData } from '../lib/storage';
+
+export { useAppSlice, useAppSymbolsKey, useWatchlistItem } from '../lib/app-store';
+
+type AppActions = {
+  update: (patch: Partial<AppData>) => void;
+  setData: Dispatch<SetStateAction<AppData>>;
+};
+
+const AppActionsContext = createContext<AppActions | null>(null);
 
 type AppContextValue = {
   data: AppData;
   update: (patch: Partial<AppData>) => void;
-  setData: React.Dispatch<React.SetStateAction<AppData>>;
+  setData: Dispatch<SetStateAction<AppData>>;
 };
 
 const AppContext = createContext<AppContextValue | null>(null);
@@ -28,6 +40,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     dataRef.current = data;
+    appStore.syncData(data);
   }, [data]);
 
   useEffect(() => {
@@ -57,14 +70,25 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setData((prev) => ({ ...prev, ...patch }));
   }, []);
 
+  const actions = useMemo(() => ({ update, setData }), [update]);
+
   const value = useMemo(
     () => ({ data, update, setData }),
     [data, update]
   );
 
   return (
-    <AppContext.Provider value={value}>{children}</AppContext.Provider>
+    <AppActionsContext.Provider value={actions}>
+      <AppContext.Provider value={value}>{children}</AppContext.Provider>
+    </AppActionsContext.Provider>
   );
+}
+
+/** 仅获取 setData / update，不随 data 变化重渲染 */
+export function useAppActions(): AppActions {
+  const ctx = useContext(AppActionsContext);
+  if (!ctx) throw new Error('useAppActions must be used within AppProvider');
+  return ctx;
 }
 
 export function useApp() {

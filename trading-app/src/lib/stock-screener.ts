@@ -46,25 +46,28 @@ function isStName(name: string): boolean {
 }
 
 async function fetchLiquidUniverse(pages = 3, pageSize = 50): Promise<SinaRow[]> {
-  const all: SinaRow[] = [];
-  for (let page = 1; page <= pages; page++) {
-    const url = `${SINA}/quotes_service/api/json_v2.php/Market_Center.getHQNodeData?page=${page}&num=${pageSize}&sort=amount&asc=0&node=hs_a`;
-    try {
-      const res = await fetch(url, {
-        signal: AbortSignal.timeout(12_000),
-      });
-      if (!res.ok) continue;
-      const rows = (await res.json()) as SinaRow[];
-      if (!Array.isArray(rows)) break;
-      all.push(...rows);
-    } catch {
-      if (all.length === 0 && page === 1) {
-        throw new Error(
-          '无法获取全市场列表（网络或跨域限制）。请用本地 npm run dev，或稍后重试。'
-        );
+  const pageNums = Array.from({ length: pages }, (_, i) => i + 1);
+  const pageResults = await Promise.all(
+    pageNums.map(async (page) => {
+      const url = `${SINA}/quotes_service/api/json_v2.php/Market_Center.getHQNodeData?page=${page}&num=${pageSize}&sort=amount&asc=0&node=hs_a`;
+      try {
+        const res = await fetch(url, {
+          signal: AbortSignal.timeout(12_000),
+        });
+        if (!res.ok) return [] as SinaRow[];
+        const rows = (await res.json()) as SinaRow[];
+        return Array.isArray(rows) ? rows : [];
+      } catch {
+        return [] as SinaRow[];
       }
-      break;
-    }
+    })
+  );
+
+  const all = pageResults.flat();
+  if (all.length === 0) {
+    throw new Error(
+      '无法获取全市场列表（网络或跨域限制）。请用本地 npm run dev，或稍后重试。'
+    );
   }
   return all.filter((r) => r.code && r.name && !isStName(r.name));
 }
@@ -397,7 +400,7 @@ export async function runStockScreen(options: {
       total: hot.length,
     });
     done = 0;
-    for (const row of hot) {
+    const emotionHits = await mapPool(hot, 8, async (row) => {
       const cp = Number(row.changepercent) || 0;
       const tr = Number(row.turnoverratio) || 0;
       const scores = evaluateEmotionStock(cp, tr, envPart);
@@ -407,7 +410,7 @@ export async function runStockScreen(options: {
         done,
         total: hot.length,
       });
-      if (!scores) continue;
+      if (!scores) return null;
       const symbol = normalizeSymbol(row.code);
       const totalScore = stockScoreTotal({
         id: '',
@@ -418,12 +421,11 @@ export async function runStockScreen(options: {
         status: 'watch',
         createdAt: '',
       });
-      if (totalScore < 10) continue;
-      if (candidates.some((c) => c.symbol === symbol)) continue;
-      candidates.push({
+      if (totalScore < 10) return null;
+      return {
         symbol,
         name: row.name,
-        mode: 'emotion',
+        mode: 'emotion' as const,
         price: Number(row.trade) || 0,
         changePercent: cp,
         ma5: 0,
@@ -435,9 +437,13 @@ export async function runStockScreen(options: {
           '情绪环境允许下纳入观察',
         ],
         scores,
-        status: 'watch',
+        status: 'watch' as const,
         totalScore,
-      });
+      };
+    });
+    for (const hit of emotionHits) {
+      if (candidates.some((c) => c.symbol === hit.symbol)) continue;
+      candidates.push(hit);
     }
   }
 
@@ -446,18 +452,18 @@ export async function runStockScreen(options: {
     done: 0,
     total: ETF_CODES.length,
   });
-  for (let i = 0; i < ETF_CODES.length; i++) {
-    const etf = ETF_CODES[i]!;
+  let etfDone = 0;
+  const etfHits = await mapPool(ETF_CODES, 4, async (etf) => {
     const bars = await fetchKlinesCached(etf.symbol, 'day', 40);
+    etfDone++;
     options.onProgress?.({
       phase: '扫描 ETF',
-      done: i + 1,
+      done: etfDone,
       total: ETF_CODES.length,
     });
-    if (!bars) continue;
+    if (!bars) return null;
     const ev = evaluateEtf(bars, envPart);
-    if (!ev) continue;
-    if (candidates.some((c) => c.symbol === etf.symbol)) continue;
+    if (!ev) return null;
     const totalScore = stockScoreTotal({
       id: '',
       symbol: etf.symbol,
@@ -467,13 +473,17 @@ export async function runStockScreen(options: {
       status: ev.status,
       createdAt: '',
     });
-    candidates.push({
+    return {
       symbol: etf.symbol,
       name: etf.name,
-      mode: 'etf',
+      mode: 'etf' as const,
       ...ev,
       totalScore,
-    });
+    };
+  });
+  for (const hit of etfHits) {
+    if (candidates.some((c) => c.symbol === hit.symbol)) continue;
+    candidates.push(hit);
   }
 
   candidates.sort((a, b) => b.totalScore - a.totalScore);

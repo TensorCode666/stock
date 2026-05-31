@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useApp } from '../context/AppContext';
+import { useAppActions, useAppSlice } from '../context/AppContext';
 import { useQuote } from '../context/MarketDataContext';
 import { normalizeSymbol } from '../lib/symbols';
 import {
@@ -57,8 +57,11 @@ function emptyPlan(): TradePlan {
 }
 
 export function BuyPlan() {
-  const { data, setData } = useApp();
-  const todayEnv = data.envScores.find((e) => e.date === todayStr());
+  const { setData } = useAppActions();
+  const envScores = useAppSlice('envScores');
+  const watchlist = useAppSlice('watchlist');
+  const tradePlans = useAppSlice('tradePlans');
+  const todayEnv = envScores.find((e) => e.date === todayStr());
   const envTotal = todayEnv ? envScoreTotal(todayEnv) : 0;
 
   const [form, setForm] = useState<TradePlan>(() => {
@@ -99,7 +102,7 @@ export function BuyPlan() {
   };
 
   const fillFromWatch = (symbol: string) => {
-    const w = data.watchlist.find(
+    const w = watchlist.find(
       (x) => x.symbol === symbol && x.status !== 'removed'
     );
     if (!w) return;
@@ -130,7 +133,7 @@ export function BuyPlan() {
       <div className="grid-2">
         <div className="card section">
           <h3>交易计划表单</h3>
-          {data.watchlist.filter((w) => w.status !== 'removed').length > 0 && (
+          {watchlist.filter((w) => w.status !== 'removed').length > 0 && (
             <label className="field">
               从观察池填入
               <select
@@ -140,7 +143,7 @@ export function BuyPlan() {
                 }}
               >
                 <option value="">选择…</option>
-                {data.watchlist
+                {watchlist
                   .filter((w) => w.status !== 'removed')
                   .map((w) => (
                     <option key={w.id} value={w.symbol}>
@@ -346,7 +349,7 @@ export function BuyPlan() {
         </div>
       </div>
 
-      {data.tradePlans.length > 0 && (
+      {tradePlans.length > 0 && (
         <section className="card section">
           <h3>历史买入计划</h3>
           <table className="table">
@@ -360,7 +363,7 @@ export function BuyPlan() {
               </tr>
             </thead>
             <tbody>
-              {data.tradePlans.slice(0, 10).map((p) => (
+              {tradePlans.slice(0, 10).map((p) => (
                 <tr key={p.id}>
                   <td>{p.createdAt.slice(0, 10)}</td>
                   <td>

@@ -1,10 +1,23 @@
+import { memo } from 'react';
 import {
   changeClass,
   formatChangePercent,
   type IndexQuote,
 } from '../lib/market-api';
 
-export function MarketIndices({
+const IndexItem = memo(function IndexItem({ idx }: { idx: IndexQuote }) {
+  return (
+    <div className="index-item">
+      <div className="index-name">{idx.name}</div>
+      <div className="index-price">{idx.price.toFixed(2)}</div>
+      <div className={`index-chg ${changeClass(idx.changePercent)}`}>
+        {formatChangePercent(idx.changePercent)}
+      </div>
+    </div>
+  );
+});
+
+export const MarketIndices = memo(function MarketIndices({
   indices,
   loading,
   refreshing,
@@ -42,20 +55,14 @@ export function MarketIndices({
           <span className="muted">暂无指数数据</span>
         )}
         {indices.map((idx) => (
-          <div key={idx.code} className="index-item">
-            <div className="index-name">{idx.name}</div>
-            <div className="index-price">{idx.price.toFixed(2)}</div>
-            <div className={`index-chg ${changeClass(idx.changePercent)}`}>
-              {formatChangePercent(idx.changePercent)}
-            </div>
-          </div>
+          <IndexItem key={idx.code} idx={idx} />
         ))}
       </div>
     </div>
   );
-}
+});
 
-export function MarketBreadthBar({
+export const MarketBreadthBar = memo(function MarketBreadthBar({
   up,
   down,
   flat,
@@ -90,4 +97,4 @@ export function MarketBreadthBar({
       </div>
     </div>
   );
-}
+});

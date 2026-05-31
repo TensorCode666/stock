@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { useApp } from '../context/AppContext';
+import { useAppActions, useAppSlice } from '../context/AppContext';
 import {
   BUY_BEFORE_ITEMS,
   HOLDING_ITEMS,
@@ -50,11 +50,12 @@ function CheckSection({
 }
 
 export function DailyChecklist() {
-  const { data, setData } = useApp();
+  const { setData } = useAppActions();
+  const dailyChecklists = useAppSlice('dailyChecklists');
   const today = todayStr();
 
   const state = useMemo(() => {
-    const found = data.dailyChecklists.find((c) => c.date === today);
+    const found = dailyChecklists.find((c) => c.date === today);
     if (found) return found;
     return {
       date: today,
@@ -64,7 +65,7 @@ export function DailyChecklist() {
       sellBefore: emptyChecks(SELL_BEFORE_ITEMS),
       postMarket: emptyChecks(POST_MARKET_ITEMS),
     };
-  }, [data.dailyChecklists, today]);
+  }, [dailyChecklists, today]);
 
   const persist = (next: DailyChecklistState) => {
     setData((prev) => {

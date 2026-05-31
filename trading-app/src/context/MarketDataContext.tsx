@@ -1,14 +1,10 @@
 import {
-  createContext,
   useCallback,
-  useContext,
   useEffect,
   useMemo,
   useRef,
-  useState,
   type ReactNode,
 } from 'react';
-import { useApp } from './AppContext';
 import {
   fetchIndices,
   fetchMarketBreadth,
@@ -17,14 +13,29 @@ import {
   type MarketBreadth,
   type StockQuote,
 } from '../lib/market-api';
+import { useAppSymbolsKey } from '../lib/app-store';
+import { fetchKlinesCached } from '../lib/kline-cache';
+import {
+  marketStore,
+  useMarketBreadth,
+  useMarketIndices,
+  useMarketRefresh,
+  useMarketStatus,
+} from '../lib/market-store';
 import { quotesStore } from '../lib/quotes-store';
-import { normalizeSymbol, symbolsKey } from '../lib/symbols';
 
+export {
+  useMarketBreadth,
+  useMarketIndices,
+  useMarketRefresh,
+  useMarketStatus,
+} from '../lib/market-store';
 export { useQuote, useQuotesRevision } from '../lib/quotes-store';
 
 type RefreshOptions = { silent?: boolean };
 
-type MarketDataContextValue = {
+/** @deprecated 请用 useMarketIndices / useMarketBreadth / useMarketStatus / useMarketRefresh */
+export type MarketDataContextValue = {
   indices: IndexQuote[];
   breadth: MarketBreadth | null;
   loading: boolean;
@@ -32,64 +43,15 @@ type MarketDataContextValue = {
   error: string | null;
   lastUpdated: Date | null;
   refresh: (options?: RefreshOptions) => Promise<void>;
-  /** @deprecated 优先使用 useQuote(symbol) 以减少无关重渲染 */
-  getQuote: (symbol: string) => StockQuote | undefined;
 };
 
-const MarketDataContext = createContext<MarketDataContextValue | null>(null);
-
 const REFRESH_MS = 30_000;
-
-function indicesChanged(prev: IndexQuote[], next: IndexQuote[]): boolean {
-  if (prev.length !== next.length) return true;
-  for (let i = 0; i < next.length; i++) {
-    const a = prev[i];
-    const b = next[i];
-    if (!a || !b || a.code !== b.code) return true;
-    if (a.price !== b.price || a.changePercent !== b.changePercent) return true;
-  }
-  return false;
-}
-
-function breadthChanged(
-  prev: MarketBreadth | null,
-  next: MarketBreadth | null
-): boolean {
-  if (prev === next) return false;
-  if (!prev || !next) return true;
-  return (
-    prev.up !== next.up ||
-    prev.down !== next.down ||
-    prev.flat !== next.flat ||
-    prev.total !== next.total
-  );
-}
+const SYMBOLS_REFRESH_DEBOUNCE_MS = 250;
+const KLINE_PREFETCH_LIMIT = 16;
 
 export function MarketDataProvider({ children }: { children: ReactNode }) {
-  const { data } = useApp();
-  const [indices, setIndices] = useState<IndexQuote[]>([]);
-  const [breadth, setBreadth] = useState<MarketBreadth | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const symbolsKeyValue = useAppSymbolsKey();
   const initialDone = useRef(false);
-  const indicesRef = useRef<IndexQuote[]>([]);
-  const breadthRef = useRef<MarketBreadth | null>(null);
-
-  const symbolsKeyValue = useMemo(() => {
-    const set = new Set<string>();
-    for (const w of data.watchlist) {
-      if (w.status !== 'removed') set.add(normalizeSymbol(w.symbol));
-    }
-    for (const h of data.holdings) {
-      set.add(normalizeSymbol(h.symbol));
-    }
-    for (const f of data.favorites) {
-      set.add(normalizeSymbol(f.symbol));
-    }
-    return symbolsKey([...set]);
-  }, [data.watchlist, data.holdings, data.favorites]);
 
   const refresh = useCallback(
     async (options?: RefreshOptions) => {
@@ -98,10 +60,10 @@ export function MarketDataProvider({ children }: { children: ReactNode }) {
         : [];
       const silent = options?.silent ?? initialDone.current;
       if (!silent) {
-        setLoading(true);
-        setRefreshing(true);
+        marketStore.patchStatus({ loading: true, refreshing: true });
       }
-      setError(null);
+      marketStore.patchStatus({ error: null });
+
       const errors: string[] = [];
       const [idx, br, qMap] = await Promise.all([
         fetchIndices().catch((e) => {
@@ -114,38 +76,48 @@ export function MarketDataProvider({ children }: { children: ReactNode }) {
           return new Map<string, StockQuote>();
         }),
       ]);
-      const idxChanged = indicesChanged(indicesRef.current, idx);
-      const brChanged = breadthChanged(breadthRef.current, br);
+
+      const idxChanged = marketStore.setIndices(idx);
+      const brChanged = marketStore.setBreadth(br);
       const qChanged = quotesStore.setQuotes(qMap);
 
-      if (idxChanged) {
-        indicesRef.current = idx;
-        setIndices(idx);
-      }
-      if (brChanged) {
-        breadthRef.current = br;
-        setBreadth(br);
-      }
       if (idxChanged || brChanged || qChanged) {
-        setLastUpdated(new Date());
+        marketStore.touchLastUpdated();
       }
+
       if (errors.length && idx.length === 0 && qMap.size === 0) {
-        setError(errors.join('；'));
+        marketStore.patchStatus({ error: errors.join('；') });
       } else if (errors.length) {
-        setError(`部分行情不可用（已尝试腾讯备用源）：${errors[0]}`);
+        marketStore.patchStatus({
+          error: `部分行情不可用（已尝试腾讯备用源）：${errors[0]}`,
+        });
       }
+
       initialDone.current = true;
       if (!silent) {
-        setLoading(false);
-        setRefreshing(false);
+        marketStore.patchStatus({ loading: false, refreshing: false });
       }
     },
     [symbolsKeyValue]
   );
 
   useEffect(() => {
-    void refresh();
+    marketStore.setRefreshHandler(refresh);
   }, [refresh]);
+
+  useEffect(() => {
+    const delay = initialDone.current ? SYMBOLS_REFRESH_DEBOUNCE_MS : 0;
+    const t = setTimeout(() => void refresh(), delay);
+    return () => clearTimeout(t);
+  }, [refresh]);
+
+  useEffect(() => {
+    if (!symbolsKeyValue) return;
+    const symbols = symbolsKeyValue.split(',').filter(Boolean);
+    for (const sym of symbols.slice(0, KLINE_PREFETCH_LIMIT)) {
+      void fetchKlinesCached(sym, 'day', 40);
+    }
+  }, [symbolsKeyValue]);
 
   useEffect(() => {
     const tick = () => {
@@ -165,12 +137,16 @@ export function MarketDataProvider({ children }: { children: ReactNode }) {
     };
   }, [refresh]);
 
-  const getQuote = useCallback(
-    (symbol: string) => quotesStore.getQuote(symbol),
-    []
-  );
+  return <>{children}</>;
+}
 
-  const value = useMemo(
+/** 兼容旧代码；新页面请用 market-store 细粒度 hooks */
+export function useMarketData(): MarketDataContextValue {
+  const indices = useMarketIndices();
+  const breadth = useMarketBreadth();
+  const { loading, refreshing, error, lastUpdated } = useMarketStatus();
+  const refresh = useMarketRefresh();
+  return useMemo(
     () => ({
       indices,
       breadth,
@@ -179,31 +155,7 @@ export function MarketDataProvider({ children }: { children: ReactNode }) {
       error,
       lastUpdated,
       refresh,
-      getQuote,
     }),
-    [
-      indices,
-      breadth,
-      loading,
-      refreshing,
-      error,
-      lastUpdated,
-      refresh,
-      getQuote,
-    ]
+    [indices, breadth, loading, refreshing, error, lastUpdated, refresh]
   );
-
-  return (
-    <MarketDataContext.Provider value={value}>
-      {children}
-    </MarketDataContext.Provider>
-  );
-}
-
-export function useMarketData() {
-  const ctx = useContext(MarketDataContext);
-  if (!ctx) {
-    throw new Error('useMarketData must be used within MarketDataProvider');
-  }
-  return ctx;
 }

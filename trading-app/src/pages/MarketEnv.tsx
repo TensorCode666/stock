@@ -1,6 +1,10 @@
 import { useState } from 'react';
-import { useApp } from '../context/AppContext';
-import { useMarketData } from '../context/MarketDataContext';
+import { useAppActions, useAppSlice } from '../context/AppContext';
+import {
+  useMarketBreadth,
+  useMarketIndices,
+  useMarketStatus,
+} from '../context/MarketDataContext';
 import { envScoreLabel, envScoreTotal } from '../lib/calculations';
 import {
   DIM_LABELS,
@@ -40,9 +44,12 @@ const emptyScore = (): MarketEnvScore => ({
 });
 
 export function MarketEnv() {
-  const { data, setData } = useApp();
-  const { indices, breadth, loading: marketLoading } = useMarketData();
-  const existing = data.envScores.find((e) => e.date === todayStr());
+  const { setData } = useAppActions();
+  const envScores = useAppSlice('envScores');
+  const indices = useMarketIndices();
+  const breadth = useMarketBreadth();
+  const { loading: marketLoading } = useMarketStatus();
+  const existing = envScores.find((e) => e.date === todayStr());
   const [form, setForm] = useState<MarketEnvScore>(existing ?? emptyScore());
   const [aiResult, setAiResult] = useState<MarketEnvAiResult | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
@@ -262,7 +269,7 @@ export function MarketEnv() {
 
       <section className="card section">
         <h3>历史评分</h3>
-        {data.envScores.length === 0 ? (
+        {envScores.length === 0 ? (
           <p className="muted">暂无记录</p>
         ) : (
           <table className="table">
@@ -275,7 +282,7 @@ export function MarketEnv() {
               </tr>
             </thead>
             <tbody>
-              {[...data.envScores]
+              {[...envScores]
                 .reverse()
                 .slice(0, 14)
                 .map((e) => {

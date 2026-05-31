@@ -2,7 +2,7 @@ import { memo, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { QuoteCell } from '../components/QuoteCell';
 import { StockSearch } from '../components/StockSearch';
-import { useApp } from '../context/AppContext';
+import { useAppActions, useAppSlice } from '../context/AppContext';
 import { useQuote } from '../context/MarketDataContext';
 import {
   envScoreTotal,
@@ -59,8 +59,6 @@ function emptyItem(): WatchlistItem {
 
 type WatchlistRowProps = {
   item: WatchlistItem;
-  inFav: boolean;
-  inHold: boolean;
   onBuy: (w: WatchlistItem) => void;
   onFavorite: (w: WatchlistItem) => void;
   onEdit: (w: WatchlistItem) => void;
@@ -69,13 +67,15 @@ type WatchlistRowProps = {
 
 const WatchlistRow = memo(function WatchlistRow({
   item: w,
-  inFav,
-  inHold,
   onBuy,
   onFavorite,
   onEdit,
   onRemove,
 }: WatchlistRowProps) {
+  const favorites = useAppSlice('favorites');
+  const holdings = useAppSlice('holdings');
+  const inFav = isFavorite(favorites, w.symbol);
+  const inHold = !!findHoldingBySymbol(holdings, w.symbol);
   const quote = useQuote(w.symbol);
     const total = stockScoreTotal(w);
     const label = stockScoreLabel(total);
@@ -145,7 +145,12 @@ const WatchlistRow = memo(function WatchlistRow({
 });
 
 export function Watchlist() {
-  const { data, setData } = useApp();
+  const { setData } = useAppActions();
+  const watchlist = useAppSlice('watchlist');
+  const envScores = useAppSlice('envScores');
+  const settings = useAppSlice('settings');
+  const holdings = useAppSlice('holdings');
+  const favorites = useAppSlice('favorites');
   const [editing, setEditing] = useState<WatchlistItem | null>(null);
   const [scanning, setScanning] = useState(false);
   const [progress, setProgress] = useState<ScreenProgress | null>(null);
@@ -153,12 +158,12 @@ export function Watchlist() {
   const [scanError, setScanError] = useState<string | null>(null);
   const [buyDraft, setBuyDraft] = useState<Holding | null>(null);
 
-  const todayEnv = data.envScores.find((e) => e.date === todayStr());
+  const todayEnv = envScores.find((e) => e.date === todayStr());
   const envTotal = todayEnv ? envScoreTotal(todayEnv) : 5;
 
   const active = useMemo(
-    () => data.watchlist.filter((w) => w.status !== 'removed'),
-    [data.watchlist]
+    () => watchlist.filter((w) => w.status !== 'removed'),
+    [watchlist]
   );
   const screened = useMemo(
     () => active.filter((w) => w.source === 'screen'),
@@ -247,7 +252,7 @@ export function Watchlist() {
       alert('无法获取现价，请稍后重试');
       return;
     }
-    setBuyDraft(createHoldingDraft(w, price, data.settings));
+    setBuyDraft(createHoldingDraft(w, price, settings));
   };
 
   const confirmBuy = () => {
@@ -260,7 +265,7 @@ export function Watchlist() {
       return;
     }
     const sym = normalizeSymbol(buyDraft.symbol);
-    const existing = findHoldingBySymbol(data.holdings, sym);
+    const existing = findHoldingBySymbol(holdings, sym);
     if (existing && !confirm(`【${sym}】已有持仓记录，仍新增一条？`)) {
       return;
     }
@@ -275,7 +280,7 @@ export function Watchlist() {
   const addToFavorites = async (w: WatchlistItem) => {
     const sym = normalizeSymbol(w.symbol);
     if (!sym) return;
-    if (isFavorite(data.favorites, sym)) {
+    if (isFavorite(favorites, sym)) {
       alert('该标的已在自选股中');
       return;
     }
@@ -330,8 +335,6 @@ export function Watchlist() {
               <WatchlistRow
                 key={w.id}
                 item={w}
-                inFav={isFavorite(data.favorites, w.symbol)}
-                inHold={!!findHoldingBySymbol(data.holdings, w.symbol)}
                 onBuy={openBuy}
                 onFavorite={addToFavorites}
                 onEdit={setEditing}

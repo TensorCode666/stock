@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { useApp } from '../context/AppContext';
+import { useAppActions, useAppSlice } from '../context/AppContext';
 import { CLASSIFICATION_LABELS, TRADE_MODE_LABELS } from '../lib/calculations';
 import { newId } from '../lib/storage';
 import type { TradeClassification, TradeMode, TradeRecord } from '../types';
@@ -26,11 +26,11 @@ function emptyTrade(): TradeRecord {
 }
 
 export function Journal() {
-  const { data, setData } = useApp();
+  const { setData } = useAppActions();
+  const trades = useAppSlice('trades');
   const [form, setForm] = useState<TradeRecord | null>(null);
 
   const stats = useMemo(() => {
-    const trades = data.trades;
     if (trades.length === 0) return null;
     const pnlOf = (t: TradeRecord) =>
       t.pnl ?? (t.sellPrice - t.buyPrice) * t.shares;
@@ -57,7 +57,7 @@ export function Journal() {
       violations: violations.length,
       totalPnl: trades.reduce((s, t) => s + pnlOf(t), 0),
     };
-  }, [data.trades]);
+  }, [trades]);
 
   const save = () => {
     if (!form?.symbol.trim()) return;
@@ -292,7 +292,7 @@ export function Journal() {
       )}
 
       <div className="card section">
-        {data.trades.length === 0 ? (
+        {trades.length === 0 ? (
           <p className="muted">暂无交易记录</p>
         ) : (
           <table className="table">
@@ -307,7 +307,7 @@ export function Journal() {
               </tr>
             </thead>
             <tbody>
-              {data.trades.map((t) => {
+              {trades.map((t) => {
                 const pnl =
                   t.pnl ??
                   (t.sellPrice - t.buyPrice) * t.shares;

@@ -1,7 +1,8 @@
 import { memo, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { QuoteCell } from '../components/QuoteCell';
-import { useApp } from '../context/AppContext';
+import { useAppActions, useAppSlice } from '../context/AppContext';
+import { appStore } from '../lib/app-store';
 import { useQuote } from '../context/MarketDataContext';
 import {
   envScoreLabel,
@@ -52,15 +53,19 @@ const DashboardWatchRow = memo(function DashboardWatchRow({
 });
 
 export function Dashboard() {
-  const { data, setData } = useApp();
+  const { setData } = useAppActions();
+  const watchlist = useAppSlice('watchlist');
+  const envScores = useAppSlice('envScores');
+  const holdings = useAppSlice('holdings');
+  const settings = useAppSlice('settings');
   const importRef = useRef<HTMLInputElement>(null);
   const today = todayStr();
-  const todayEnv = [...data.envScores]
+  const todayEnv = [...envScores]
     .reverse()
     .find((e) => e.date === today);
   const envTotal = todayEnv ? envScoreTotal(todayEnv) : null;
   const envInfo = envTotal !== null ? envScoreLabel(envTotal) : null;
-  const activeWatch = data.watchlist.filter((w) => w.status !== 'removed');
+  const activeWatch = watchlist.filter((w) => w.status !== 'removed');
   const readyWatch = activeWatch.filter((w) => w.status === 'ready');
 
   return (
@@ -91,7 +96,7 @@ export function Dashboard() {
           <h3>观察池</h3>
           <div className="big-num">{activeWatch.length}</div>
           <p className="small">
-            重点观察 {readyWatch.length} · 持仓 {data.holdings.length}
+            重点观察 {readyWatch.length} · 持仓 {holdings.length}
           </p>
           <Link to="/watchlist" className="btn-link">
             管理观察池 →
@@ -101,10 +106,10 @@ export function Dashboard() {
         <div className="card">
           <h3>资金设置</h3>
           <div className="big-num">
-            ¥{data.settings.totalCapital.toLocaleString()}
+            ¥{settings.totalCapital.toLocaleString()}
           </div>
           <p className="small">
-            单笔最大亏损 {data.settings.maxLossPerTradePercent}%
+            单笔最大亏损 {settings.maxLossPerTradePercent}%
           </p>
           <Link to="/position" className="btn-link">
             仓位计算 →
@@ -155,7 +160,7 @@ export function Dashboard() {
           <button
             type="button"
             className="btn"
-            onClick={() => downloadAppData(data)}
+            onClick={() => downloadAppData(appStore.getData())}
           >
             导出备份
           </button>

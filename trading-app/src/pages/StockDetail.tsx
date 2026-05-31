@@ -1,15 +1,15 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
 import { LazyStockChartPanels } from '../components/LazyStockChartPanels';
 import { StockQuoteHero } from '../components/StockQuoteHero';
-import { useApp } from '../context/AppContext';
+import { useWatchlistItem } from '../context/AppContext';
 import { useQuote } from '../context/MarketDataContext';
 import {
   stockScoreLabel,
   stockScoreTotal,
   TRADE_MODE_LABELS,
 } from '../lib/calculations';
-import { fetchStockChartDataCached } from '../lib/kline-cache';
+import { fetchKlinesCached, fetchStockChartDataCached } from '../lib/kline-cache';
 import {
   KLINE_PERIOD_LABELS,
   type EnrichedBar,
@@ -27,18 +27,8 @@ export function StockDetail() {
   const { symbol: symbolParam } = useParams<{ symbol: string }>();
   const location = useLocation();
   const state = (location.state ?? {}) as LocationState;
-  const { data } = useApp();
-
   const symbol = normalizeSymbol(symbolParam ?? '');
-  const watchItem = useMemo(
-    () =>
-      data.watchlist.find(
-        (w) =>
-          w.status !== 'removed' &&
-          (w.id === state.watchlistId || normalizeSymbol(w.symbol) === symbol)
-      ),
-    [data.watchlist, state.watchlistId, symbol]
-  );
+  const watchItem = useWatchlistItem(symbol, state.watchlistId);
 
   const displayName = watchItem?.name || state.name || symbol;
   const [period, setPeriod] = useState<KlinePeriod>('day');
@@ -74,6 +64,14 @@ export function StockDetail() {
       cancelled = true;
     };
   }, [symbol, period]);
+
+  useEffect(() => {
+    if (!symbol || loading || !bars.length) return;
+    if (period === 'day') {
+      void fetchKlinesCached(symbol, 'week', 120);
+      void fetchKlinesCached(symbol, 'month', 120);
+    }
+  }, [symbol, period, loading, bars.length]);
 
   useEffect(() => {
     if (!symbol || storeQuote) {
