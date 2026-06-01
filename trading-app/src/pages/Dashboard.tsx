@@ -1,6 +1,7 @@
-import { memo, useRef } from 'react';
+import { memo, useMemo, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { QuoteCell } from '../components/QuoteCell';
+import { StockLink } from '../components/StockLink';
 import { useAppActions, useAppSlice } from '../context/AppContext';
 import { appStore } from '../lib/app-store';
 import { useQuote } from '../context/MarketDataContext';
@@ -25,22 +26,14 @@ const DashboardWatchRow = memo(function DashboardWatchRow({
   return (
     <tr>
       <td>
-        <Link
-          to={`/stock/${w.symbol}`}
-          state={{ name: w.name, watchlistId: w.id }}
-          className="stock-link"
-        >
+        <StockLink symbol={w.symbol} name={w.name} watchlistId={w.id}>
           {w.symbol}
-        </Link>
+        </StockLink>
       </td>
       <td>
-        <Link
-          to={`/stock/${w.symbol}`}
-          state={{ name: w.name, watchlistId: w.id }}
-          className="stock-link"
-        >
+        <StockLink symbol={w.symbol} name={w.name} watchlistId={w.id}>
           {w.name}
-        </Link>
+        </StockLink>
       </td>
       <td>{w.mode}</td>
       <td>{stockScoreTotal(w)}/20</td>
@@ -65,8 +58,14 @@ export function Dashboard() {
     .find((e) => e.date === today);
   const envTotal = todayEnv ? envScoreTotal(todayEnv) : null;
   const envInfo = envTotal !== null ? envScoreLabel(envTotal) : null;
-  const activeWatch = watchlist.filter((w) => w.status !== 'removed');
-  const readyWatch = activeWatch.filter((w) => w.status === 'ready');
+  const activeWatch = useMemo(
+    () => watchlist.filter((w) => w.status !== 'removed'),
+    [watchlist]
+  );
+  const readyWatch = useMemo(
+    () => activeWatch.filter((w) => w.status === 'ready'),
+    [activeWatch]
+  );
 
   return (
     <div className="page">

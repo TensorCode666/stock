@@ -1,8 +1,10 @@
-import { memo, useMemo, useState } from 'react';
+import { memo, useCallback, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { QuoteCell } from '../components/QuoteCell';
+import { StockLink } from '../components/StockLink';
 import { StockSearch } from '../components/StockSearch';
 import { useAppActions, useAppSlice } from '../context/AppContext';
+import { appStore } from '../lib/app-store';
 import { useQuote } from '../context/MarketDataContext';
 import {
   envScoreTotal,
@@ -59,6 +61,8 @@ function emptyItem(): WatchlistItem {
 
 type WatchlistRowProps = {
   item: WatchlistItem;
+  inFav: boolean;
+  inHold: boolean;
   onBuy: (w: WatchlistItem) => void;
   onFavorite: (w: WatchlistItem) => void;
   onEdit: (w: WatchlistItem) => void;
@@ -67,38 +71,28 @@ type WatchlistRowProps = {
 
 const WatchlistRow = memo(function WatchlistRow({
   item: w,
+  inFav,
+  inHold,
   onBuy,
   onFavorite,
   onEdit,
   onRemove,
 }: WatchlistRowProps) {
-  const favorites = useAppSlice('favorites');
-  const holdings = useAppSlice('holdings');
-  const inFav = isFavorite(favorites, w.symbol);
-  const inHold = !!findHoldingBySymbol(holdings, w.symbol);
   const quote = useQuote(w.symbol);
-    const total = stockScoreTotal(w);
-    const label = stockScoreLabel(total);
-    return (
-      <tr>
-        <td>
-          <Link
-            to={`/stock/${w.symbol}`}
-            state={{ name: w.name, watchlistId: w.id }}
-            className="stock-link"
-          >
-            {w.symbol}
-          </Link>
-        </td>
-        <td>
-          <Link
-            to={`/stock/${w.symbol}`}
-            state={{ name: w.name, watchlistId: w.id }}
-            className="stock-link"
-          >
-            {w.name}
-          </Link>
-        </td>
+  const total = stockScoreTotal(w);
+  const label = stockScoreLabel(total);
+  return (
+    <tr>
+      <td>
+        <StockLink symbol={w.symbol} name={w.name} watchlistId={w.id}>
+          {w.symbol}
+        </StockLink>
+      </td>
+      <td>
+        <StockLink symbol={w.symbol} name={w.name} watchlistId={w.id}>
+          {w.name}
+        </StockLink>
+      </td>
         <td>{TRADE_MODE_LABELS[w.mode]}</td>
         <td>
           <strong>{total}</strong>/20
@@ -141,14 +135,41 @@ const WatchlistRow = memo(function WatchlistRow({
           </button>
         </td>
       </tr>
-    );
-});
+  );
+}, watchlistRowEqual);
+
+function watchlistRowEqual(
+  prev: WatchlistRowProps,
+  next: WatchlistRowProps
+): boolean {
+  if (
+    prev.inFav !== next.inFav ||
+    prev.inHold !== next.inHold ||
+    prev.onBuy !== next.onBuy ||
+    prev.onFavorite !== next.onFavorite ||
+    prev.onEdit !== next.onEdit ||
+    prev.onRemove !== next.onRemove
+  ) {
+    return false;
+  }
+  const a = prev.item;
+  const b = next.item;
+  return (
+    a.id === b.id &&
+    a.symbol === b.symbol &&
+    a.name === b.name &&
+    a.mode === b.mode &&
+    a.status === b.status &&
+    a.notes === b.notes &&
+    a.scores === b.scores &&
+    a.screenReasons === b.screenReasons
+  );
+}
 
 export function Watchlist() {
   const { setData } = useAppActions();
   const watchlist = useAppSlice('watchlist');
   const envScores = useAppSlice('envScores');
-  const settings = useAppSlice('settings');
   const holdings = useAppSlice('holdings');
   const favorites = useAppSlice('favorites');
   const [editing, setEditing] = useState<WatchlistItem | null>(null);
@@ -228,16 +249,16 @@ export function Watchlist() {
     setEditing(null);
   };
 
-  const remove = (id: string) => {
+  const remove = useCallback((id: string) => {
     setData((prev) => ({
       ...prev,
       watchlist: prev.watchlist.map((w) =>
         w.id === id ? { ...w, status: 'removed' as const } : w
       ),
     }));
-  };
+  }, [setData]);
 
-  const openBuy = async (w: WatchlistItem) => {
+  const openBuy = useCallback(async (w: WatchlistItem) => {
     const sym = normalizeSymbol(w.symbol);
     if (!sym) {
       alert('代码无效');
@@ -252,8 +273,8 @@ export function Watchlist() {
       alert('无法获取现价，请稍后重试');
       return;
     }
-    setBuyDraft(createHoldingDraft(w, price, settings));
-  };
+    setBuyDraft(createHoldingDraft(w, price, appStore.getSlice('settings')));
+  }, []);
 
   const confirmBuy = () => {
     if (!buyDraft?.symbol.trim() || buyDraft.buyPrice <= 0) {
@@ -277,10 +298,10 @@ export function Watchlist() {
     alert('已记入持仓，可在「持仓」页查看与编辑');
   };
 
-  const addToFavorites = async (w: WatchlistItem) => {
+  const addToFavorites = useCallback(async (w: WatchlistItem) => {
     const sym = normalizeSymbol(w.symbol);
     if (!sym) return;
-    if (isFavorite(favorites, sym)) {
+    if (isFavorite(appStore.getSlice('favorites'), sym)) {
       alert('该标的已在自选股中');
       return;
     }
@@ -306,7 +327,19 @@ export function Watchlist() {
         },
       ],
     }));
-  };
+  }, [setData]);
+
+  const favSet = useMemo(
+    () => new Set(favorites.map((f) => normalizeSymbol(f.symbol))),
+    [favorites]
+  );
+  const holdSet = useMemo(
+    () =>
+      new Set(
+        holdings.map((h) => normalizeSymbol(h.symbol)).filter(Boolean)
+      ),
+    [holdings]
+  );
 
   const renderTable = (items: WatchlistItem[], title: string) => (
     <div className="watch-section">
@@ -331,16 +364,21 @@ export function Watchlist() {
             </tr>
           </thead>
           <tbody>
-            {items.map((w) => (
-              <WatchlistRow
-                key={w.id}
-                item={w}
-                onBuy={openBuy}
-                onFavorite={addToFavorites}
-                onEdit={setEditing}
-                onRemove={remove}
-              />
-            ))}
+            {items.map((w) => {
+              const sym = normalizeSymbol(w.symbol);
+              return (
+                <WatchlistRow
+                  key={w.id}
+                  item={w}
+                  inFav={favSet.has(sym)}
+                  inHold={holdSet.has(sym)}
+                  onBuy={openBuy}
+                  onFavorite={addToFavorites}
+                  onEdit={setEditing}
+                  onRemove={remove}
+                />
+              );
+            })}
           </tbody>
         </table>
       )}

@@ -6,11 +6,16 @@ type Listener = () => void;
 
 let quotesMap = new Map<string, StockQuote>();
 let revision = 0;
-const listeners = new Set<Listener>();
+const globalListeners = new Set<Listener>();
+const symbolListeners = new Map<string, Set<Listener>>();
 
-function notify() {
+function notifyGlobal() {
   revision += 1;
-  listeners.forEach((l) => l());
+  globalListeners.forEach((l) => l());
+}
+
+function notifySymbol(sym: string) {
+  symbolListeners.get(sym)?.forEach((l) => l());
 }
 
 function quoteEqual(a: StockQuote, b: StockQuote): boolean {
@@ -39,6 +44,21 @@ function mergeQuotes(next: Map<string, StockQuote>): Map<string, StockQuote> {
   return merged;
 }
 
+function collectChangedSymbols(
+  prev: Map<string, StockQuote>,
+  merged: Map<string, StockQuote>
+): Set<string> {
+  const changed = new Set<string>();
+  for (const [sym, qa] of merged) {
+    const pb = prev.get(sym);
+    if (!pb || pb !== qa) changed.add(sym);
+  }
+  for (const sym of prev.keys()) {
+    if (!merged.has(sym)) changed.add(sym);
+  }
+  return changed;
+}
+
 export const quotesStore = {
   getSnapshot(): Map<string, StockQuote> {
     return quotesMap;
@@ -47,13 +67,32 @@ export const quotesStore = {
     return revision;
   },
   subscribe(listener: Listener): () => void {
-    listeners.add(listener);
-    return () => listeners.delete(listener);
+    globalListeners.add(listener);
+    return () => globalListeners.delete(listener);
+  },
+  subscribeSymbol(symbol: string, listener: Listener): () => void {
+    const sym = normalizeSymbol(symbol);
+    if (!sym) return () => {};
+    let set = symbolListeners.get(sym);
+    if (!set) {
+      set = new Set();
+      symbolListeners.set(sym, set);
+    }
+    set.add(listener);
+    return () => {
+      const listeners = symbolListeners.get(sym);
+      if (!listeners) return;
+      listeners.delete(listener);
+      if (listeners.size === 0) symbolListeners.delete(sym);
+    };
   },
   setQuotes(next: Map<string, StockQuote>): boolean {
     if (!quotesChanged(quotesMap, next)) return false;
-    quotesMap = mergeQuotes(next);
-    notify();
+    const merged = mergeQuotes(next);
+    const changed = collectChangedSymbols(quotesMap, merged);
+    quotesMap = merged;
+    for (const sym of changed) notifySymbol(sym);
+    notifyGlobal();
     return true;
   },
   getQuote(symbol: string): StockQuote | undefined {
@@ -64,7 +103,7 @@ export const quotesStore = {
 export function useQuote(symbol: string): StockQuote | undefined {
   const sym = normalizeSymbol(symbol);
   return useSyncExternalStore(
-    quotesStore.subscribe,
+    (listener) => quotesStore.subscribeSymbol(sym, listener),
     () => quotesStore.getQuote(sym),
     () => undefined
   );

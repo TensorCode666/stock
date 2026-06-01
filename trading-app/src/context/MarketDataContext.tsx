@@ -1,7 +1,6 @@
 import {
   useCallback,
   useEffect,
-  useMemo,
   useRef,
   type ReactNode,
 } from 'react';
@@ -9,20 +8,13 @@ import {
   fetchIndices,
   fetchMarketBreadth,
   fetchStockQuotes,
-  type IndexQuote,
-  type MarketBreadth,
   type StockQuote,
 } from '../lib/market-api';
-import { useAppSymbolsKey } from '../lib/app-store';
-import { fetchKlinesCached } from '../lib/kline-cache';
-import {
-  marketStore,
-  useMarketBreadth,
-  useMarketIndices,
-  useMarketRefresh,
-  useMarketStatus,
-} from '../lib/market-store';
+import { appStore, useAppSymbolsKey } from '../lib/app-store';
+import { prefetchKlinesBatched } from '../lib/kline-prefetch';
+import { marketStore } from '../lib/market-store';
 import { quotesStore } from '../lib/quotes-store';
+import { normalizeSymbol } from '../lib/symbols';
 
 export {
   useMarketBreadth,
@@ -30,25 +22,12 @@ export {
   useMarketRefresh,
   useMarketStatus,
 } from '../lib/market-store';
-export { useQuote, useQuotesRevision } from '../lib/quotes-store';
+export { useQuote } from '../lib/quotes-store';
 
 type RefreshOptions = { silent?: boolean };
 
-/** @deprecated 请用 useMarketIndices / useMarketBreadth / useMarketStatus / useMarketRefresh */
-export type MarketDataContextValue = {
-  indices: IndexQuote[];
-  breadth: MarketBreadth | null;
-  loading: boolean;
-  refreshing: boolean;
-  error: string | null;
-  lastUpdated: Date | null;
-  refresh: (options?: RefreshOptions) => Promise<void>;
-};
-
 const REFRESH_MS = 30_000;
 const SYMBOLS_REFRESH_DEBOUNCE_MS = 250;
-const KLINE_PREFETCH_LIMIT = 16;
-
 export function MarketDataProvider({ children }: { children: ReactNode }) {
   const symbolsKeyValue = useAppSymbolsKey();
   const initialDone = useRef(false);
@@ -113,10 +92,14 @@ export function MarketDataProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!symbolsKeyValue) return;
-    const symbols = symbolsKeyValue.split(',').filter(Boolean);
-    for (const sym of symbols.slice(0, KLINE_PREFETCH_LIMIT)) {
-      void fetchKlinesCached(sym, 'day', 40);
-    }
+    const all = symbolsKeyValue.split(',').filter(Boolean);
+    const holdingSyms = appStore
+      .getSlice('holdings')
+      .map((h) => normalizeSymbol(h.symbol))
+      .filter(Boolean);
+    const rest = all.filter((sym) => !holdingSyms.includes(sym));
+    prefetchKlinesBatched(holdingSyms, { period: 'day', limit: 40, priority: 2 });
+    prefetchKlinesBatched(rest, { period: 'day', limit: 40, priority: 0 });
   }, [symbolsKeyValue]);
 
   useEffect(() => {
@@ -138,24 +121,4 @@ export function MarketDataProvider({ children }: { children: ReactNode }) {
   }, [refresh]);
 
   return <>{children}</>;
-}
-
-/** 兼容旧代码；新页面请用 market-store 细粒度 hooks */
-export function useMarketData(): MarketDataContextValue {
-  const indices = useMarketIndices();
-  const breadth = useMarketBreadth();
-  const { loading, refreshing, error, lastUpdated } = useMarketStatus();
-  const refresh = useMarketRefresh();
-  return useMemo(
-    () => ({
-      indices,
-      breadth,
-      loading,
-      refreshing,
-      error,
-      lastUpdated,
-      refresh,
-    }),
-    [indices, breadth, loading, refreshing, error, lastUpdated, refresh]
-  );
 }

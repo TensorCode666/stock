@@ -9,7 +9,7 @@ import {
   stockScoreTotal,
   TRADE_MODE_LABELS,
 } from '../lib/calculations';
-import { fetchKlinesCached, fetchStockChartDataCached } from '../lib/kline-cache';
+import { fetchKlinesCached, fetchStockChartDataCached, getStockChartDataSync } from '../lib/kline-cache';
 import {
   KLINE_PERIOD_LABELS,
   type EnrichedBar,
@@ -32,33 +32,48 @@ export function StockDetail() {
 
   const displayName = watchItem?.name || state.name || symbol;
   const [period, setPeriod] = useState<KlinePeriod>('day');
-  const [bars, setBars] = useState<EnrichedBar[]>([]);
+  const [bars, setBars] = useState<EnrichedBar[]>(() => {
+    if (!symbol) return [];
+    return getStockChartDataSync(symbol, 'day')?.bars ?? [];
+  });
   const storeQuote = useQuote(symbol);
   const [fallbackQuote, setFallbackQuote] = useState<StockQuote | undefined>();
   const quote = storeQuote ?? fallbackQuote;
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => {
+    if (!symbol) return false;
+    return !getStockChartDataSync(symbol, 'day')?.bars.length;
+  });
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!symbol) return;
     let cancelled = false;
-    setLoading(true);
-    setError(null);
 
-    void (async () => {
-      const chart = await fetchStockChartDataCached(symbol, period);
+    const cached = getStockChartDataSync(symbol, period);
+    if (cached?.bars.length) {
+      setBars(cached.bars);
+      setLoading(false);
+      setError(null);
+    } else {
+      setLoading(true);
+      setError(null);
+    }
+
+    void fetchStockChartDataCached(symbol, period).then((chart) => {
       if (cancelled) return;
       if (!chart?.bars.length) {
-        setError(
-          `${KLINE_PERIOD_LABELS[period]}数据加载失败，请检查网络或稍后重试`
-        );
-        setBars([]);
+        if (!cached?.bars.length) {
+          setError(
+            `${KLINE_PERIOD_LABELS[period]}数据加载失败，请检查网络或稍后重试`
+          );
+          setBars([]);
+        }
       } else {
         setBars(chart.bars);
         setError(null);
       }
       setLoading(false);
-    })();
+    });
 
     return () => {
       cancelled = true;
@@ -159,9 +174,9 @@ export function StockDetail() {
 
       {error && <div className="market-error">{error}</div>}
 
-      {loading && <p className="muted">图表加载中…</p>}
+      {loading && bars.length === 0 && <p className="muted">图表加载中…</p>}
 
-      {!loading && bars.length > 0 && (
+      {bars.length > 0 && (
         <LazyStockChartPanels
           bars={bars}
           period={period}

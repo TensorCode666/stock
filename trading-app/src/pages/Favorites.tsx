@@ -1,3 +1,4 @@
+import { useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { FavoriteRow } from '../components/FavoriteRow';
 import { useAppActions, useAppSlice } from '../context/AppContext';
@@ -6,12 +7,12 @@ export function Favorites() {
   const { setData } = useAppActions();
   const list = useAppSlice('favorites');
 
-  const remove = (id: string) => {
+  const remove = useCallback((id: string) => {
     setData((prev) => ({
       ...prev,
       favorites: prev.favorites.filter((f) => f.id !== id),
     }));
-  };
+  }, [setData]);
 
   return (
     <div className="page">

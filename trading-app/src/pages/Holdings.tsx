@@ -1,18 +1,16 @@
-import { memo, useEffect, useMemo, useState } from 'react';
+import { memo, useState } from 'react';
 import { HoldingPnl, QuoteCell } from '../components/QuoteCell';
 import { StockSearch } from '../components/StockSearch';
 import { useAppActions, useAppSlice } from '../context/AppContext';
-import { useQuote, useQuotesRevision } from '../context/MarketDataContext';
-import { quotesStore } from '../lib/quotes-store';
+import { useQuote } from '../context/MarketDataContext';
 import { envScoreTotal, TRADE_MODE_LABELS } from '../lib/calculations';
 import {
   ADVICE_TAG_CLASS,
   DEFAULT_HOLDING_ADVICE,
-  evaluateHoldingAdvice,
   type HoldingAdvice,
 } from '../lib/holding-advice';
-import { fetchKlinesCached } from '../lib/kline-cache';
-import type { KlineBar } from '../lib/kline-indicators';
+import { useHoldingAdvices } from '../lib/use-holding-advices';
+import { useHoldingsKlines } from '../lib/use-holdings-klines';
 import { newId, todayStr } from '../lib/storage';
 import { isValidSymbol, normalizeSymbol, symbolsKey } from '../lib/symbols';
 import type { Holding, TradeMode } from '../types';
@@ -42,11 +40,11 @@ function emptyHolding(): Holding {
 const AdviceCard = memo(function AdviceCard({
   holding,
   advice,
-  loading,
+  adviceLoading,
 }: {
   holding: Holding;
   advice: HoldingAdvice;
-  loading: boolean;
+  adviceLoading: boolean;
 }) {
   return (
     <div className={`advice-card advice-${advice.action}`}>
@@ -63,7 +61,7 @@ const AdviceCard = memo(function AdviceCard({
           {advice.label}
         </span>
       </div>
-      {loading ? (
+      {adviceLoading ? (
         <p className="small muted">正在加载 K 线…</p>
       ) : (
         <>
@@ -147,12 +145,7 @@ export function Holdings() {
   const { setData } = useAppActions();
   const holdings = useAppSlice('holdings');
   const envScores = useAppSlice('envScores');
-  const quotesRevision = useQuotesRevision();
   const [form, setForm] = useState<Holding | null>(null);
-  const [klinesMap, setKlinesMap] = useState<Map<string, KlineBar[]>>(
-    new Map()
-  );
-  const [klinesLoading, setKlinesLoading] = useState(false);
 
   const todayEnv = envScores.find((e) => e.date === todayStr());
 
@@ -160,53 +153,10 @@ export function Holdings() {
     holdings.map((h) => normalizeSymbol(h.symbol)).filter(Boolean)
   );
 
-  useEffect(() => {
-    const symbols = holdingSymbolsKey
-      ? holdingSymbolsKey.split(',').filter(Boolean)
-      : [];
-    if (symbols.length === 0) {
-      setKlinesMap(new Map());
-      setKlinesLoading(false);
-      return;
-    }
-    let cancelled = false;
-    setKlinesLoading(true);
-    void (async () => {
-      const entries = await Promise.all(
-        symbols.map(async (sym) => {
-          const bars = await fetchKlinesCached(sym, 'day', 40);
-          return [sym, bars ?? []] as const;
-        })
-      );
-      if (cancelled) return;
-      setKlinesMap(new Map(entries));
-      setKlinesLoading(false);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [holdingSymbolsKey]);
+  const { klinesMap, loading: klinesLoading } =
+    useHoldingsKlines(holdingSymbolsKey);
 
-  const adviceById = useMemo(() => {
-    const map = new Map<string, HoldingAdvice>();
-    for (const h of holdings) {
-      const sym = normalizeSymbol(h.symbol);
-      const bars = klinesMap.get(sym);
-      const adviceReady = Boolean(bars?.length);
-      map.set(
-        h.id,
-        adviceReady
-          ? evaluateHoldingAdvice({
-              holding: h,
-              quote: quotesStore.getQuote(sym),
-              bars,
-              envScore: todayEnv ?? null,
-            })
-          : DEFAULT_HOLDING_ADVICE
-      );
-    }
-    return map;
-  }, [holdings, klinesMap, todayEnv, quotesRevision]);
+  const adviceById = useHoldingAdvices(holdings, klinesMap, todayEnv);
 
   const save = () => {
     if (!form?.symbol.trim()) return;
@@ -429,18 +379,17 @@ export function Holdings() {
           <div className="advice-grid">
             {holdings.map((h) => {
               const sym = normalizeSymbol(h.symbol);
-              const advice =
-                adviceById.get(h.id) ?? DEFAULT_HOLDING_ADVICE;
-              const loading =
+              const advice = adviceById.get(h.id) ?? DEFAULT_HOLDING_ADVICE;
+              const adviceLoading =
                 klinesLoading && !klinesMap.get(sym)?.length;
               return (
-              <AdviceCard
-                key={h.id}
-                holding={h}
-                advice={advice}
-                loading={loading}
-              />
-            );
+                <AdviceCard
+                  key={h.id}
+                  holding={h}
+                  advice={advice}
+                  adviceLoading={adviceLoading}
+                />
+              );
             })}
           </div>
         </div>
@@ -469,14 +418,15 @@ export function Holdings() {
             <tbody>
               {holdings.map((h) => {
                 const sym = normalizeSymbol(h.symbol);
+                const advice = adviceById.get(h.id) ?? DEFAULT_HOLDING_ADVICE;
+                const adviceLoading =
+                  klinesLoading && !klinesMap.get(sym)?.length;
                 return (
                   <HoldingTableRow
                     key={h.id}
                     holding={h}
-                    advice={adviceById.get(h.id) ?? DEFAULT_HOLDING_ADVICE}
-                    adviceLoading={
-                      klinesLoading && !klinesMap.get(sym)?.length
-                    }
+                    advice={advice}
+                    adviceLoading={adviceLoading}
                     onEdit={setForm}
                     onRemove={remove}
                   />

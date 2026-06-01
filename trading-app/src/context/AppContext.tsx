@@ -23,14 +23,6 @@ type AppActions = {
 
 const AppActionsContext = createContext<AppActions | null>(null);
 
-type AppContextValue = {
-  data: AppData;
-  update: (patch: Partial<AppData>) => void;
-  setData: Dispatch<SetStateAction<AppData>>;
-};
-
-const AppContext = createContext<AppContextValue | null>(null);
-
 const SAVE_DEBOUNCE_MS = 400;
 
 export function AppProvider({ children }: { children: ReactNode }) {
@@ -72,14 +64,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const actions = useMemo(() => ({ update, setData }), [update]);
 
-  const value = useMemo(
-    () => ({ data, update, setData }),
-    [data, update]
-  );
-
   return (
     <AppActionsContext.Provider value={actions}>
-      <AppContext.Provider value={value}>{children}</AppContext.Provider>
+      {children}
     </AppActionsContext.Provider>
   );
 }
@@ -88,11 +75,5 @@ export function AppProvider({ children }: { children: ReactNode }) {
 export function useAppActions(): AppActions {
   const ctx = useContext(AppActionsContext);
   if (!ctx) throw new Error('useAppActions must be used within AppProvider');
-  return ctx;
-}
-
-export function useApp() {
-  const ctx = useContext(AppContext);
-  if (!ctx) throw new Error('useApp must be used within AppProvider');
   return ctx;
 }

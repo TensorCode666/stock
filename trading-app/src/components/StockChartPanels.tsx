@@ -371,6 +371,30 @@ export function StockChartPanels({
     if (fit) shouldFitRef.current = false;
   }, [bars, period]);
 
+  useEffect(() => {
+    const bundle = bundleRef.current;
+    if (!bundle || period !== 'day' || !bars.length) return;
+    if (currentPrice == null || currentPrice <= 0) return;
+
+    const last = bars[bars.length - 1]!;
+    if (
+      last.close === currentPrice &&
+      last.high >= currentPrice &&
+      last.low <= currentPrice
+    ) {
+      return;
+    }
+
+    const time = toTime(last.date);
+    bundle.candles.update({
+      time,
+      open: last.open,
+      high: Math.max(last.high, currentPrice),
+      low: Math.min(last.low, currentPrice),
+      close: currentPrice,
+    });
+  }, [currentPrice, bars, period]);
+
   const hintCls =
     crosshairHint == null
       ? ''

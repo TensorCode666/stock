@@ -1,6 +1,8 @@
 import { memo, useEffect, useRef, useState } from 'react';
 import { searchStocks, type StockSearchResult } from '../lib/market-api';
 
+const MAX_SEARCH_RESULTS = 12;
+
 export const StockSearch = memo(function StockSearch({
   onSelect,
   query: controlledQuery,
@@ -60,7 +62,7 @@ export const StockSearch = memo(function StockSearch({
       {loading && <span className="small">搜索中…</span>}
       {results.length > 0 && (
         <ul className="search-dropdown">
-          {results.map((r) => (
+          {results.slice(0, MAX_SEARCH_RESULTS).map((r) => (
             <li key={r.secid}>
               <button
                 type="button"

@@ -1,13 +1,12 @@
 import { memo } from 'react';
-import { Link } from 'react-router-dom';
 import { changeClass } from '../lib/market-api';
 import { useQuote } from '../context/MarketDataContext';
+import { StockLink } from './StockLink';
 import {
   formatAddedAt,
   formatPnlPercent,
   pnlPercentFromInitial,
 } from '../lib/favorites';
-import { normalizeSymbol } from '../lib/symbols';
 import type { FavoriteStock } from '../types';
 
 type FavoriteRowProps = {
@@ -25,22 +24,14 @@ export const FavoriteRow = memo(function FavoriteRow({
   return (
     <tr>
       <td>
-        <Link
-          to={`/stock/${f.symbol}`}
-          state={{ name: f.name }}
-          className="stock-link"
-        >
+        <StockLink symbol={f.symbol} name={f.name}>
           {f.symbol}
-        </Link>
+        </StockLink>
       </td>
       <td>
-        <Link
-          to={`/stock/${normalizeSymbol(f.symbol)}`}
-          state={{ name: f.name }}
-          className="stock-link"
-        >
+        <StockLink symbol={f.symbol} name={f.name}>
           {f.name}
-        </Link>
+        </StockLink>
       </td>
       <td>{f.initialPrice.toFixed(2)}</td>
       <td className="small">{formatAddedAt(f.addedAt)}</td>

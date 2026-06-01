@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { StockLink } from '../components/StockLink';
 import { LazyStockChartPanels } from '../components/LazyStockChartPanels';
 import { StockSearch } from '../components/StockSearch';
 import { useAppActions, useAppSlice } from '../context/AppContext';
@@ -532,13 +532,9 @@ export function Practice() {
                 <button type="button" className="btn" onClick={resetToSetup}>
                   再练一题
                 </button>
-                <Link
-                  to={`/stock/${ctx.symbol}`}
-                  className="btn"
-                  state={{ name: ctx.name }}
-                >
+                <StockLink symbol={ctx.symbol} name={ctx.name} className="btn">
                   查看该股详情
-                </Link>
+                </StockLink>
               </div>
             </section>
           )}

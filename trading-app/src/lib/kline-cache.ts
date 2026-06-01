@@ -50,6 +50,32 @@ export async function fetchKlinesCached(
   return promise;
 }
 
+/** 同步读取 enriched 缓存（TTL 内有效），用于详情页秒开 */
+export function getStockChartDataSync(
+  symbol: string,
+  period: KlinePeriod = 'day',
+  limit?: number
+): StockChartData | null {
+  const code = normalizeSymbol(symbol);
+  if (!code) return null;
+  const barLimit = limit ?? 120;
+  const key = cacheKey(code, period, barLimit);
+
+  const enrichedHit = enrichedCache.get(key);
+  if (enrichedHit && Date.now() - enrichedHit.at < TTL_MS) {
+    return { symbol: code, period, bars: enrichedHit.bars };
+  }
+
+  const rawHit = cache.get(key);
+  if (rawHit && Date.now() - rawHit.at < TTL_MS && rawHit.bars.length) {
+    const enriched = enrichBars(rawHit.bars);
+    enrichedCache.set(key, { bars: enriched, at: rawHit.at });
+    return { symbol: code, period, bars: enriched };
+  }
+
+  return null;
+}
+
 /** 带 TTL 的图表数据（含 enrichBars，enriched 结果单独缓存） */
 export async function fetchStockChartDataCached(
   symbol: string,
