@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { QuoteCell } from '../components/QuoteCell';
 import { StockLink } from '../components/StockLink';
 import { StockSearch } from '../components/StockSearch';
-import { useAppActions, useAppSlice } from '../context/AppContext';
+import { useAppActions, useAppSlice, useTodayEnvScore } from '../context/AppContext';
 import { appStore } from '../lib/app-store';
 import { useQuote } from '../context/MarketDataContext';
 import {
@@ -26,7 +26,7 @@ import {
 } from '../lib/holdings';
 import { fetchStockQuote } from '../lib/market-api';
 import { normalizeSymbol } from '../lib/symbols';
-import { newId, todayStr } from '../lib/storage';
+import { newId } from '../lib/storage';
 import type { Holding, TradeMode, WatchlistItem } from '../types';
 
 const SCORE_FIELDS = [
@@ -169,7 +169,6 @@ function watchlistRowEqual(
 export function Watchlist() {
   const { setData } = useAppActions();
   const watchlist = useAppSlice('watchlist');
-  const envScores = useAppSlice('envScores');
   const holdings = useAppSlice('holdings');
   const favorites = useAppSlice('favorites');
   const [editing, setEditing] = useState<WatchlistItem | null>(null);
@@ -178,8 +177,7 @@ export function Watchlist() {
   const [preview, setPreview] = useState<ScreenCandidate[]>([]);
   const [scanError, setScanError] = useState<string | null>(null);
   const [buyDraft, setBuyDraft] = useState<Holding | null>(null);
-
-  const todayEnv = envScores.find((e) => e.date === todayStr());
+  const todayEnv = useTodayEnvScore();
   const envTotal = todayEnv ? envScoreTotal(todayEnv) : 5;
 
   const active = useMemo(
@@ -286,7 +284,7 @@ export function Watchlist() {
       return;
     }
     const sym = normalizeSymbol(buyDraft.symbol);
-    const existing = findHoldingBySymbol(holdings, sym);
+    const existing = findHoldingBySymbol(appStore.getSlice('holdings'), sym);
     if (existing && !confirm(`【${sym}】已有持仓记录，仍新增一条？`)) {
       return;
     }

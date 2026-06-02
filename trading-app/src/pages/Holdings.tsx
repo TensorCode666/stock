@@ -1,7 +1,8 @@
-import { memo, useState } from 'react';
+import { memo, useCallback, useState } from 'react';
 import { HoldingPnl, QuoteCell } from '../components/QuoteCell';
+import { StockLink } from '../components/StockLink';
 import { StockSearch } from '../components/StockSearch';
-import { useAppActions, useAppSlice } from '../context/AppContext';
+import { useAppActions, useAppSlice, useTodayEnvScore } from '../context/AppContext';
 import { useQuote } from '../context/MarketDataContext';
 import { envScoreTotal, TRADE_MODE_LABELS } from '../lib/calculations';
 import {
@@ -97,7 +98,9 @@ const HoldingTableRow = memo(function HoldingTableRow({
   return (
     <tr>
       <td>
-        {h.symbol} {h.name}
+        <StockLink symbol={h.symbol} name={h.name}>
+          {h.symbol} {h.name}
+        </StockLink>
       </td>
       <td>{TRADE_MODE_LABELS[h.mode]}</td>
       <td>
@@ -144,10 +147,8 @@ const HoldingTableRow = memo(function HoldingTableRow({
 export function Holdings() {
   const { setData } = useAppActions();
   const holdings = useAppSlice('holdings');
-  const envScores = useAppSlice('envScores');
+  const todayEnv = useTodayEnvScore();
   const [form, setForm] = useState<Holding | null>(null);
-
-  const todayEnv = envScores.find((e) => e.date === todayStr());
 
   const holdingSymbolsKey = symbolsKey(
     holdings.map((h) => normalizeSymbol(h.symbol)).filter(Boolean)
@@ -156,7 +157,12 @@ export function Holdings() {
   const { klinesMap, loading: klinesLoading } =
     useHoldingsKlines(holdingSymbolsKey);
 
-  const adviceById = useHoldingAdvices(holdings, klinesMap, todayEnv);
+  const adviceById = useHoldingAdvices(
+    holdings,
+    klinesMap,
+    todayEnv,
+    holdingSymbolsKey
+  );
 
   const save = () => {
     if (!form?.symbol.trim()) return;
@@ -184,13 +190,15 @@ export function Holdings() {
     setForm(null);
   };
 
-  const remove = (id: string) => {
+  const remove = useCallback((id: string) => {
     if (!confirm('确认删除该持仓记录？')) return;
     setData((prev) => ({
       ...prev,
       holdings: prev.holdings.filter((h) => h.id !== id),
     }));
-  };
+  }, [setData]);
+
+  const openEdit = useCallback((h: Holding) => setForm(h), []);
 
   return (
     <div className="page">
@@ -427,7 +435,7 @@ export function Holdings() {
                     holding={h}
                     advice={advice}
                     adviceLoading={adviceLoading}
-                    onEdit={setForm}
+                    onEdit={openEdit}
                     onRemove={remove}
                   />
                 );

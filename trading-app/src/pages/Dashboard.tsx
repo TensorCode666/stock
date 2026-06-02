@@ -2,7 +2,7 @@ import { memo, useMemo, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { QuoteCell } from '../components/QuoteCell';
 import { StockLink } from '../components/StockLink';
-import { useAppActions, useAppSlice } from '../context/AppContext';
+import { useAppActions, useAppSlice, useTodayEnvScore } from '../context/AppContext';
 import { appStore } from '../lib/app-store';
 import { useQuote } from '../context/MarketDataContext';
 import {
@@ -48,14 +48,11 @@ const DashboardWatchRow = memo(function DashboardWatchRow({
 export function Dashboard() {
   const { setData } = useAppActions();
   const watchlist = useAppSlice('watchlist');
-  const envScores = useAppSlice('envScores');
   const holdings = useAppSlice('holdings');
   const settings = useAppSlice('settings');
   const importRef = useRef<HTMLInputElement>(null);
   const today = todayStr();
-  const todayEnv = [...envScores]
-    .reverse()
-    .find((e) => e.date === today);
+  const todayEnv = useTodayEnvScore({ latest: true });
   const envTotal = todayEnv ? envScoreTotal(todayEnv) : null;
   const envInfo = envTotal !== null ? envScoreLabel(envTotal) : null;
   const activeWatch = useMemo(

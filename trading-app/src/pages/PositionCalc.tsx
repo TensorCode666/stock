@@ -1,18 +1,15 @@
 import { useMemo, useState } from 'react';
-import { useAppActions, useAppSlice } from '../context/AppContext';
+import { useAppActions, useAppSlice, useTodayEnvScore } from '../context/AppContext';
 import {
   envScoreLabel,
   envScoreTotal,
   positionFromRisk,
   suggestedSinglePosition,
 } from '../lib/calculations';
-import { todayStr } from '../lib/storage';
-
 export function PositionCalc() {
   const { update } = useAppActions();
   const settings = useAppSlice('settings');
-  const envScores = useAppSlice('envScores');
-  const todayEnv = envScores.find((e) => e.date === todayStr());
+  const todayEnv = useTodayEnvScore();
   const envTotal = todayEnv ? envScoreTotal(todayEnv) : null;
   const envInfo = envTotal !== null ? envScoreLabel(envTotal) : null;
 

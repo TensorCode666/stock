@@ -1,3 +1,4 @@
+import { memo, useCallback, type FocusEvent, type MouseEvent } from 'react';
 import { Link, type LinkProps } from 'react-router-dom';
 import { prefetchStockDetail } from '../lib/kline-prefetch';
 import { normalizeSymbol } from '../lib/symbols';
@@ -8,7 +9,7 @@ type StockLinkProps = Omit<LinkProps, 'to' | 'state'> & {
   watchlistId?: string;
 };
 
-export function StockLink({
+export const StockLink = memo(function StockLink({
   symbol,
   name,
   watchlistId,
@@ -19,24 +20,33 @@ export function StockLink({
   ...rest
 }: StockLinkProps) {
   const code = normalizeSymbol(symbol);
-  const prefetch = () => prefetchStockDetail(code);
+  const prefetch = useCallback(() => prefetchStockDetail(code), [code]);
+
+  const handleMouseEnter = useCallback(
+    (e: MouseEvent<HTMLAnchorElement>) => {
+      prefetch();
+      onMouseEnter?.(e);
+    },
+    [prefetch, onMouseEnter]
+  );
+  const handleFocus = useCallback(
+    (e: FocusEvent<HTMLAnchorElement>) => {
+      prefetch();
+      onFocus?.(e);
+    },
+    [prefetch, onFocus]
+  );
 
   return (
     <Link
       to={`/stock/${code}`}
       state={{ name, watchlistId }}
       className={className}
-      onMouseEnter={(e) => {
-        prefetch();
-        onMouseEnter?.(e);
-      }}
-      onFocus={(e) => {
-        prefetch();
-        onFocus?.(e);
-      }}
+      onMouseEnter={handleMouseEnter}
+      onFocus={handleFocus}
       {...rest}
     >
       {children}
     </Link>
   );
-}
+});

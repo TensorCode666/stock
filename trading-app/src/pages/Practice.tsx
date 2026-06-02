@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useMemo, useRef, useState, memo } from 'react';
 import { StockLink } from '../components/StockLink';
 import { LazyStockChartPanels } from '../components/LazyStockChartPanels';
 import { StockSearch } from '../components/StockSearch';
@@ -19,7 +19,7 @@ import {
 } from '../lib/practice';
 import { todayStr, trimPracticeAttempts } from '../lib/storage';
 import { normalizeSymbol } from '../lib/symbols';
-import type { TradeMode } from '../types';
+import type { TradeMode, PracticeAttempt } from '../types';
 
 function defaultPracticeDate(): string {
   const d = new Date();
@@ -37,6 +37,39 @@ const STATUS_LABELS = {
   ready: '就绪（接近买点）',
   reject: '不纳入',
 } as const;
+
+const PracticeHistoryRow = memo(function PracticeHistoryRow({
+  item: h,
+}: {
+  item: PracticeAttempt;
+}) {
+  return (
+    <tr>
+      <td>{h.asOfDate}</td>
+      <td>
+        <StockLink symbol={h.symbol} name={h.name}>
+          {h.symbol} {h.name}
+        </StockLink>
+      </td>
+      <td>{TRADE_MODE_LABELS[h.mode]}</td>
+      <td>
+        {h.userInWatchlist
+          ? `纳入 · ${STATUS_LABELS[h.userStatus]}`
+          : '不纳入'}
+      </td>
+      <td>
+        {h.systemShouldWatchlist
+          ? `纳入 · ${STATUS_LABELS[h.systemStatus]}`
+          : '不纳入'}
+      </td>
+      <td>
+        <span className={`tag ${h.correct ? 'tag-ok' : 'tag-bad'}`}>
+          {h.correct ? '正确' : '错误'}
+        </span>
+      </td>
+    </tr>
+  );
+});
 
 export function Practice() {
   const { setData } = useAppActions();
@@ -558,30 +591,7 @@ export function Practice() {
               </thead>
               <tbody>
                 {history.slice(0, 20).map((h) => (
-                  <tr key={h.id}>
-                    <td>{h.asOfDate}</td>
-                    <td>
-                      {h.symbol} {h.name}
-                    </td>
-                    <td>{TRADE_MODE_LABELS[h.mode]}</td>
-                    <td>
-                      {h.userInWatchlist
-                        ? `纳入 · ${STATUS_LABELS[h.userStatus]}`
-                        : '不纳入'}
-                    </td>
-                    <td>
-                      {h.systemShouldWatchlist
-                        ? `纳入 · ${STATUS_LABELS[h.systemStatus]}`
-                        : '不纳入'}
-                    </td>
-                    <td>
-                      <span
-                        className={`tag ${h.correct ? 'tag-ok' : 'tag-bad'}`}
-                      >
-                        {h.correct ? '正确' : '错误'}
-                      </span>
-                    </td>
-                  </tr>
+                  <PracticeHistoryRow key={h.id} item={h} />
                 ))}
               </tbody>
             </table>

@@ -1,6 +1,6 @@
-import { useSyncExternalStore } from 'react';
-import type { AppData, WatchlistItem } from '../types';
-import { loadData } from './storage';
+import { useMemo, useSyncExternalStore } from 'react';
+import type { AppData, MarketEnvScore, WatchlistItem } from '../types';
+import { loadData, todayStr } from './storage';
 import { normalizeSymbol, symbolsKey } from './symbols';
 
 type Listener = () => void;
@@ -114,4 +114,21 @@ export function useWatchlistItem(
     () => appStore.findWatchlistItem(code, watchlistId),
     () => undefined
   );
+}
+
+/** 今日环境评分；latest 为 true 时取同日期最后一条 */
+export function useTodayEnvScore(options?: {
+  latest?: boolean;
+}): MarketEnvScore | undefined {
+  const envScores = useAppSlice('envScores');
+  return useMemo(() => {
+    const today = todayStr();
+    if (options?.latest) {
+      for (let i = envScores.length - 1; i >= 0; i--) {
+        if (envScores[i]!.date === today) return envScores[i];
+      }
+      return undefined;
+    }
+    return envScores.find((e) => e.date === today);
+  }, [envScores, options?.latest]);
 }

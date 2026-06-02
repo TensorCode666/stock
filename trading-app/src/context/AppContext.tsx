@@ -14,7 +14,12 @@ import type { AppData } from '../types';
 import { appStore } from '../lib/app-store';
 import { loadData, saveData } from '../lib/storage';
 
-export { useAppSlice, useAppSymbolsKey, useWatchlistItem } from '../lib/app-store';
+export {
+  useAppSlice,
+  useAppSymbolsKey,
+  useTodayEnvScore,
+  useWatchlistItem,
+} from '../lib/app-store';
 
 type AppActions = {
   update: (patch: Partial<AppData>) => void;

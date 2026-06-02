@@ -39,9 +39,14 @@ export function MarketDataProvider({ children }: { children: ReactNode }) {
         : [];
       const silent = options?.silent ?? initialDone.current;
       if (!silent) {
-        marketStore.patchStatus({ loading: true, refreshing: true });
+        marketStore.patchStatus({
+          loading: true,
+          refreshing: true,
+          error: null,
+        });
+      } else {
+        marketStore.patchStatus({ error: null });
       }
-      marketStore.patchStatus({ error: null });
 
       const errors: string[] = [];
       const [idx, br, qMap] = await Promise.all([
@@ -93,30 +98,45 @@ export function MarketDataProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!symbolsKeyValue) return;
     const all = symbolsKeyValue.split(',').filter(Boolean);
-    const holdingSyms = appStore
-      .getSlice('holdings')
-      .map((h) => normalizeSymbol(h.symbol))
-      .filter(Boolean);
-    const rest = all.filter((sym) => !holdingSyms.includes(sym));
+    const holdingSet = new Set(
+      appStore
+        .getSlice('holdings')
+        .map((h) => normalizeSymbol(h.symbol))
+        .filter(Boolean)
+    );
+    const holdingSyms = all.filter((sym) => holdingSet.has(sym));
+    const rest = all.filter((sym) => !holdingSet.has(sym));
     prefetchKlinesBatched(holdingSyms, { period: 'day', limit: 40, priority: 2 });
     prefetchKlinesBatched(rest, { period: 'day', limit: 40, priority: 0 });
   }, [symbolsKeyValue]);
 
   useEffect(() => {
-    const tick = () => {
-      if (document.visibilityState === 'hidden') return;
-      void refresh({ silent: true });
+    let id: ReturnType<typeof setInterval> | undefined;
+
+    const startPolling = () => {
+      if (id) return;
+      id = setInterval(() => void refresh({ silent: true }), REFRESH_MS);
     };
-    const id = setInterval(tick, REFRESH_MS);
-    const onVisible = () => {
-      if (document.visibilityState === 'visible') {
+    const stopPolling = () => {
+      if (!id) return;
+      clearInterval(id);
+      id = undefined;
+    };
+
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') {
+        stopPolling();
+      } else {
         void refresh({ silent: true });
+        startPolling();
       }
     };
-    document.addEventListener('visibilitychange', onVisible);
+
+    if (document.visibilityState === 'visible') startPolling();
+    document.addEventListener('visibilitychange', onVisibility);
     return () => {
-      clearInterval(id);
-      document.removeEventListener('visibilitychange', onVisible);
+      stopPolling();
+      document.removeEventListener('visibilitychange', onVisibility);
     };
   }, [refresh]);
 

@@ -1,5 +1,6 @@
-import { useMemo, useState } from 'react';
+import { memo, useMemo, useState } from 'react';
 import { useAppActions, useAppSlice } from '../context/AppContext';
+import { StockLink } from '../components/StockLink';
 import { CLASSIFICATION_LABELS, TRADE_MODE_LABELS } from '../lib/calculations';
 import { newId } from '../lib/storage';
 import type { TradeClassification, TradeMode, TradeRecord } from '../types';
@@ -24,6 +25,24 @@ function emptyTrade(): TradeRecord {
     improvements: '',
   };
 }
+
+const TradeRow = memo(function TradeRow({ trade: t }: { trade: TradeRecord }) {
+  const pnl = t.pnl ?? (t.sellPrice - t.buyPrice) * t.shares;
+  return (
+    <tr>
+      <td>
+        <StockLink symbol={t.symbol} name={t.name}>
+          {t.symbol} {t.name}
+        </StockLink>
+      </td>
+      <td>{TRADE_MODE_LABELS[t.mode]}</td>
+      <td className={pnl >= 0 ? 'ok' : 'warn'}>¥{pnl.toFixed(0)}</td>
+      <td>{CLASSIFICATION_LABELS[t.classification]}</td>
+      <td>{t.followedPlan ? '是' : '否'}</td>
+      <td>{t.sellDate}</td>
+    </tr>
+  );
+});
 
 export function Journal() {
   const { setData } = useAppActions();
@@ -307,25 +326,9 @@ export function Journal() {
               </tr>
             </thead>
             <tbody>
-              {trades.map((t) => {
-                const pnl =
-                  t.pnl ??
-                  (t.sellPrice - t.buyPrice) * t.shares;
-                return (
-                  <tr key={t.id}>
-                    <td>
-                      {t.symbol} {t.name}
-                    </td>
-                    <td>{TRADE_MODE_LABELS[t.mode]}</td>
-                    <td className={pnl >= 0 ? 'ok' : 'warn'}>
-                      ¥{pnl.toFixed(0)}
-                    </td>
-                    <td>{CLASSIFICATION_LABELS[t.classification]}</td>
-                    <td>{t.followedPlan ? '是' : '否'}</td>
-                    <td>{t.sellDate}</td>
-                  </tr>
-                );
-              })}
+              {trades.map((t) => (
+                <TradeRow key={t.id} trade={t} />
+              ))}
             </tbody>
           </table>
         )}

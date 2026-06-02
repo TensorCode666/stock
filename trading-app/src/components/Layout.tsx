@@ -1,4 +1,4 @@
-import { memo } from 'react';
+import { memo, useCallback } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 import { MarketBreadthBar, MarketIndices } from './MarketIndices';
 import {
@@ -27,6 +27,9 @@ const MarketIndicesBar = memo(function MarketIndicesBar() {
   const indices = useMarketIndices();
   const { loading, refreshing, error, lastUpdated } = useMarketStatus();
   const refresh = useMarketRefresh();
+  const handleRefresh = useCallback(() => {
+    void refresh();
+  }, [refresh]);
   return (
     <>
       {error && (
@@ -38,7 +41,7 @@ const MarketIndicesBar = memo(function MarketIndicesBar() {
         indices={indices}
         loading={loading}
         refreshing={refreshing}
-        onRefresh={() => void refresh()}
+        onRefresh={handleRefresh}
         lastUpdated={lastUpdated}
       />
     </>

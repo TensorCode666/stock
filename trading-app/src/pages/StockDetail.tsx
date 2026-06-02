@@ -9,7 +9,11 @@ import {
   stockScoreTotal,
   TRADE_MODE_LABELS,
 } from '../lib/calculations';
-import { fetchKlinesCached, fetchStockChartDataCached, getStockChartDataSync } from '../lib/kline-cache';
+import {
+  fetchStockChartDataCached,
+  getStockChartDataSync,
+} from '../lib/kline-cache';
+import { prefetchChartPeriod } from '../lib/kline-prefetch';
 import {
   KLINE_PERIOD_LABELS,
   type EnrichedBar,
@@ -81,11 +85,9 @@ export function StockDetail() {
   }, [symbol, period]);
 
   useEffect(() => {
-    if (!symbol || loading || !bars.length) return;
-    if (period === 'day') {
-      void fetchKlinesCached(symbol, 'week', 120);
-      void fetchKlinesCached(symbol, 'month', 120);
-    }
+    if (!symbol || period !== 'day' || loading || !bars.length) return;
+    prefetchChartPeriod(symbol, 'week');
+    prefetchChartPeriod(symbol, 'month');
   }, [symbol, period, loading, bars.length]);
 
   useEffect(() => {
@@ -165,6 +167,8 @@ export function StockDetail() {
             type="button"
             className={period === p ? 'period-btn active' : 'period-btn'}
             disabled={loading && period === p}
+            onMouseEnter={() => prefetchChartPeriod(symbol, p)}
+            onFocus={() => prefetchChartPeriod(symbol, p)}
             onClick={() => setPeriod(p)}
           >
             {KLINE_PERIOD_LABELS[p]}

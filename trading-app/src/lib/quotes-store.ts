@@ -1,4 +1,4 @@
-import { useSyncExternalStore } from 'react';
+import { useCallback, useSyncExternalStore } from 'react';
 import type { StockQuote } from './market-api';
 import { normalizeSymbol } from './symbols';
 
@@ -92,7 +92,7 @@ export const quotesStore = {
     const changed = collectChangedSymbols(quotesMap, merged);
     quotesMap = merged;
     for (const sym of changed) notifySymbol(sym);
-    notifyGlobal();
+    if (globalListeners.size > 0) notifyGlobal();
     return true;
   },
   getQuote(symbol: string): StockQuote | undefined {
@@ -102,18 +102,47 @@ export const quotesStore = {
 
 export function useQuote(symbol: string): StockQuote | undefined {
   const sym = normalizeSymbol(symbol);
-  return useSyncExternalStore(
-    (listener) => quotesStore.subscribeSymbol(sym, listener),
-    () => quotesStore.getQuote(sym),
-    () => undefined
+  const subscribe = useCallback(
+    (listener: Listener) => quotesStore.subscribeSymbol(sym, listener),
+    [sym]
   );
+  const getSnapshot = useCallback(
+    () => quotesStore.getQuote(sym),
+    [sym]
+  );
+  return useSyncExternalStore(subscribe, getSnapshot, () => undefined);
 }
 
-/** 任意报价变化时递增，用于批量 derived 计算（如持仓建议） */
-export function useQuotesRevision(): number {
-  return useSyncExternalStore(
-    quotesStore.subscribe,
-    () => quotesStore.getRevision(),
-    () => 0
+function quotesFingerprint(symbols: string[]): string {
+  return symbols
+    .map((sym) => {
+      const q = quotesStore.getQuote(sym);
+      return q ? `${sym}:${q.price}:${q.changePercent}` : sym;
+    })
+    .join('|');
+}
+
+/** 仅当指定 symbol 报价变化时更新，用于持仓建议等批量 derived 计算 */
+export function useQuotesFingerprint(symbolsKey: string): string {
+  const subscribe = useCallback(
+    (listener: Listener) => {
+      const syms = symbolsKey ? symbolsKey.split(',').filter(Boolean) : [];
+      if (syms.length === 0) return () => {};
+      const unsubs = syms.map((sym) =>
+        quotesStore.subscribeSymbol(sym, listener)
+      );
+      return () => {
+        for (const u of unsubs) u();
+      };
+    },
+    [symbolsKey]
   );
+  const getSnapshot = useCallback(
+    () =>
+      quotesFingerprint(
+        symbolsKey ? symbolsKey.split(',').filter(Boolean) : []
+      ),
+    [symbolsKey]
+  );
+  return useSyncExternalStore(subscribe, getSnapshot, () => '');
 }

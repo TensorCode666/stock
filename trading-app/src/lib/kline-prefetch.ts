@@ -89,7 +89,22 @@ export function prefetchStockDetail(symbol: string): void {
   if (!code || stockPagePrefetched.has(code)) return;
   stockPagePrefetched.add(code);
   void import('../components/StockChartPanels');
-  void fetchStockChartDataCached(code, 'day', 120);
-  void fetchStockChartDataCached(code, 'week', 120);
-  void fetchStockChartDataCached(code, 'month', 120);
+  prefetchChartPeriod(code, 'day');
+  prefetchChartPeriod(code, 'week');
+  prefetchChartPeriod(code, 'month');
+}
+
+const chartPeriodScheduled = new Set<string>();
+
+/** 预加载指定周期 K 线（详情页 tab 悬停） */
+export function prefetchChartPeriod(
+  symbol: string,
+  period: KlinePeriod = 'day'
+): void {
+  const code = normalizeSymbol(symbol);
+  if (!code) return;
+  const key = taskKey(code, period, 120);
+  if (chartPeriodScheduled.has(key)) return;
+  chartPeriodScheduled.add(key);
+  void fetchStockChartDataCached(code, period, 120);
 }

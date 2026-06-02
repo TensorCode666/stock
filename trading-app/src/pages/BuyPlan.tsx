@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useAppActions, useAppSlice } from '../context/AppContext';
+import { useMemo, useState } from 'react';
+import { useAppActions, useAppSlice, useTodayEnvScore } from '../context/AppContext';
 import { useQuote } from '../context/MarketDataContext';
 import { normalizeSymbol } from '../lib/symbols';
 import {
@@ -7,7 +7,7 @@ import {
   riskRewardRatio,
   TRADE_MODE_LABELS,
 } from '../lib/calculations';
-import { newId, todayStr } from '../lib/storage';
+import { newId } from '../lib/storage';
 import type { BuyChecklist, TradeMode, TradePlan } from '../types';
 
 const CHECK_ITEMS: { key: keyof BuyChecklist; label: string }[] = [
@@ -58,10 +58,9 @@ function emptyPlan(): TradePlan {
 
 export function BuyPlan() {
   const { setData } = useAppActions();
-  const envScores = useAppSlice('envScores');
   const watchlist = useAppSlice('watchlist');
   const tradePlans = useAppSlice('tradePlans');
-  const todayEnv = envScores.find((e) => e.date === todayStr());
+  const todayEnv = useTodayEnvScore();
   const envTotal = todayEnv ? envScoreTotal(todayEnv) : 0;
 
   const [form, setForm] = useState<TradePlan>(() => {
@@ -69,6 +68,15 @@ export function BuyPlan() {
     p.envScore = envTotal;
     return p;
   });
+
+  const activeWatch = useMemo(
+    () => watchlist.filter((w) => w.status !== 'removed'),
+    [watchlist]
+  );
+  const watchBySymbol = useMemo(
+    () => new Map(activeWatch.map((w) => [w.symbol, w])),
+    [activeWatch]
+  );
 
   const quote = useQuote(form.symbol ? normalizeSymbol(form.symbol) : '');
 
@@ -102,9 +110,7 @@ export function BuyPlan() {
   };
 
   const fillFromWatch = (symbol: string) => {
-    const w = watchlist.find(
-      (x) => x.symbol === symbol && x.status !== 'removed'
-    );
+    const w = watchBySymbol.get(symbol);
     if (!w) return;
     setForm((f) => ({
       ...f,
@@ -133,7 +139,7 @@ export function BuyPlan() {
       <div className="grid-2">
         <div className="card section">
           <h3>交易计划表单</h3>
-          {watchlist.filter((w) => w.status !== 'removed').length > 0 && (
+          {activeWatch.length > 0 && (
             <label className="field">
               从观察池填入
               <select
@@ -143,13 +149,11 @@ export function BuyPlan() {
                 }}
               >
                 <option value="">选择…</option>
-                {watchlist
-                  .filter((w) => w.status !== 'removed')
-                  .map((w) => (
-                    <option key={w.id} value={w.symbol}>
-                      {w.symbol} {w.name}
-                    </option>
-                  ))}
+                {activeWatch.map((w) => (
+                  <option key={w.id} value={w.symbol}>
+                    {w.symbol} {w.name}
+                  </option>
+                ))}
               </select>
             </label>
           )}

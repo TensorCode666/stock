@@ -1,11 +1,11 @@
-import { lazy, Suspense } from 'react';
+import { lazy, memo, Suspense } from 'react';
 import type { EnrichedBar, KlinePeriod } from '../lib/kline-indicators';
 
 const StockChartPanels = lazy(() =>
   import('./StockChartPanels').then((m) => ({ default: m.StockChartPanels }))
 );
 
-export function LazyStockChartPanels({
+export const LazyStockChartPanels = memo(function LazyStockChartPanels({
   bars,
   period = 'day',
   currentPrice,
@@ -19,4 +19,4 @@ export function LazyStockChartPanels({
       <StockChartPanels bars={bars} period={period} currentPrice={currentPrice} />
     </Suspense>
   );
-}
+});
